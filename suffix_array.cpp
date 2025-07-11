@@ -116,7 +116,7 @@
     }
     
     // Getter für das LCP Array
-    std::vector<int>& SuffixArray::getLCPArray(){
+    const std::vector<int>& SuffixArray::getLCPArray() const {
         return lcpArray;
     }
     
@@ -195,59 +195,4 @@
         return result;
     }
 
-std::pair<std::vector<int>,std::vector<int>> SuffixArray::search_index_and_value(const std::string& pattern) const {
-        std::vector<int> indices;
-        std::vector<int> values;
-        int n = suffixArray.size();
-        int patternLen = pattern.length();
-        
-        // Binäre Suche für den ersten Treffer
-        int left = 0, right = n - 1;
-        int first = -1;
-        
-        while (left <= right) {
-            int mid = (left + right) / 2;
-            std::string suffix = text.substr(suffixArray[mid], patternLen);
-            
-            if (suffix >= pattern) {
-                if (suffix == pattern) {
-                    first = mid;
-                }
-                right = mid - 1;
-            } else {
-                left = mid + 1;
-            }
-        }
-        
-        if (first == -1) {
-            return {indices, values};
-        }
-        
-        // Binäre Suche für den letzten Treffer
-        left = 0;
-        right = n - 1;
-        int last = -1;
-        
-        while (left <= right) {
-            int mid = (left + right) / 2;
-            std::string suffix = text.substr(suffixArray[mid], patternLen);
-            
-            if (suffix <= pattern) {
-                if (suffix == pattern) {
-                    last = mid;
-                }
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
-        }
-        
-        // Sammle alle Treffer
-        for (int i = first; i <= last; i++) {
-            indices.push_back(suffixArray[i]);
-            values.push_back(i);
-        }
-
-        return {indices, values};
-    }
 

@@ -27,27 +27,28 @@ struct hashValue
 
 
 
-class Compress
+class CompressedSA : public SuffixArray
 {
 private:
     std::unordered_map<std::string, hashValue> hashMap;
     std::vector<int> compressedSA;
 
-    static unsigned long findLCPmaxmin( SuffixArray& sa,const int k);
+    unsigned long findLCPmaxmin(const int k);
 
-    void readPattern (SuffixArray& sa, Compress& cSA, std::string& pattern, int k);
+    void readPattern (std::string& pattern, int k);
 
 
 
 public:
     void printMap();
 
-    void initHashMap(SuffixArray& sa, const int k);
+    void initHashMap(const int k);
 
-    void compression (SuffixArray& sa, const int k);
+    void compression (const int k);
 
     void initHash(const std::string& kmere);
 
-    Compress() = default;
-    ~Compress() = default;
+    CompressedSA() = default;
+    CompressedSA(const std::string& input) : SuffixArray(input) {}
+    ~CompressedSA() = default;
 };
