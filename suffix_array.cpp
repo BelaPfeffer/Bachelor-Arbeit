@@ -196,3 +196,58 @@
     }
 
 
+std::pair<std::vector<int>, std::vector<int>> SuffixArray::search_val_and_pos(const std::string& pattern) const {
+        std::vector<int> values;
+        std::vector<int> positions;
+        int n = suffixArray.size();
+        int patternLen = pattern.length();
+        
+        // Binäre Suche für den ersten Treffer
+        int left = 0, right = n - 1;
+        int first = -1;
+        
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            std::string suffix = text.substr(suffixArray[mid], patternLen);
+            
+            if (suffix >= pattern) {
+                if (suffix == pattern) {
+                    first = mid;
+                }
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+        
+        if (first == -1) {
+            return {values, positions};
+        }
+        
+        // Binäre Suche für den letzten Treffer
+        left = 0;
+        right = n - 1;
+        int last = -1;
+        
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            std::string suffix = text.substr(suffixArray[mid], patternLen);
+            
+            if (suffix <= pattern) {
+                if (suffix == pattern) {
+                    last = mid;
+                }
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+            }
+        }
+        
+        // Sammle alle Treffer
+        for (int i = first; i <= last; i++) {
+            values.push_back(suffixArray[i]);
+            positions.push_back(i);
+        }
+
+        return {values, positions};
+    }

@@ -64,14 +64,14 @@ void CompressedSA::printMap(){
 
 unsigned long CompressedSA::findLCPmaxmin(const int k)
 {
-    const std::vector<int>& lcpArray = this -> lcpArray;
+    std::vector<int>& lcpArray = this -> lcpArray;
     auto maxIt = std::max_element(lcpArray.begin(), lcpArray.end());
     int index = std::distance(lcpArray.begin(), maxIt);
 
     unsigned long upperBound = index;
     unsigned long lowerBound = index;
 
-    while (lcpArray[upperBound + 1] >= k && upperBound < lcpArray.size() - 2) {
+    while (lcpArray[upperBound + 1] >= k && upperBound <= lcpArray.size() - k) {
         upperBound++;
     }
 
@@ -79,8 +79,11 @@ unsigned long CompressedSA::findLCPmaxmin(const int k)
         lowerBound--;
     }
 
+
     auto minIt = std::min_element(lcpArray.begin() + lowerBound, lcpArray.begin() + upperBound);
     unsigned long minIndex = std::distance(lcpArray.begin(), minIt);
+    std::fill(lcpArray.begin() + lowerBound, lcpArray.begin() + upperBound + k-1, -1);
+    this -> printLCPArray();
 
     return minIndex;
     
@@ -117,11 +120,11 @@ void CompressedSA::readPattern (std::string& pattern, int k)
 {
     std::string kmer_old = pattern.substr(0, k);
     std::cout << "Kmer_old: " << kmer_old << "\n";
-    std::vector<int> tempResult = this -> search(kmer_old);
-    this -> compressedSA = tempResult;
+    std::pair<std::vector<int>, std::vector<int>> tempRes = this -> search_val_and_pos(kmer_old);
+    this -> compressedSA = tempRes.first;
     // std::cout << "Result size: " << tempResult.size() << "\n";
     this -> hashMap[kmer_old].kSAindex = 0;
-    this -> hashMap[kmer_old].occurences = tempResult.size();
+    this -> hashMap[kmer_old].occurences = tempRes.first.size();
     this -> hashMap[kmer_old].shift = -1; // no shift, because it is not dependent on another pattern
 
     int shift = 1;
@@ -132,32 +135,33 @@ void CompressedSA::readPattern (std::string& pattern, int k)
     {
         std::string kmer_new = pattern.substr(i,k);
         std::cout << "Kmer: " << kmer_new << "\n";
-        tempResult = this -> search(kmer_new);
+        tempRes = this -> search_val_and_pos(kmer_new);
         unsigned i_res = 0;
         unsigned i_temp = 0;
 
-        while (i_res < old_res_size && i_temp < tempResult.size())
+        while (i_res < old_res_size && i_temp < tempRes.first.size())
         {   
               std::cout << "Flag: " << i << "\n";
                 std::cout << "cSA.compressedSA[i_res] + shift : " << this -> compressedSA[i_res] + shift << "\n";
-                std::cout << "tempResult[i_temp]: " << tempResult[i_temp] << "\n";
+                std::cout << "tempRes.first[i_temp]: " << tempRes.first[i_temp] << "\n";
                 std::cout << "shift: " << shift << "\n";
-            if (this ->compressedSA[i_res] + shift == tempResult[i_temp] )
+            if (this -> compressedSA[i_res] + shift == tempRes.first[i_temp] )
             {   
-              
+                this -> lcpArray[tempRes.second[i_temp]] = -1;
                 i_res++;
                 i_temp++;
             }
             else
             {   
-                this -> compressedSA.push_back(tempResult[i_temp]);
+                this -> compressedSA.push_back(tempRes.first[i_temp]);
                 this -> hashMap[kmer_new].kSAindex = this -> compressedSA.size() - 1;
                 this -> hashMap[kmer_new].occurences += 1;
+                this -> lcpArray[tempRes.second[i_temp]] = -1;
                 i_temp++;
             }
            
         }
-        
+
         if(i_res == old_res_size )
         {
             if(this -> hashMap[kmer_old].traceback == nullptr)
@@ -170,9 +174,9 @@ void CompressedSA::readPattern (std::string& pattern, int k)
             }
         }
 
-        while (i_temp < tempResult.size())
+        while (i_temp < tempRes.first.size())
         {
-            this -> compressedSA.push_back(tempResult[i_temp]);
+            this -> compressedSA.push_back(tempRes.first[i_temp]);
             this -> hashMap[kmer_new].kSAindex = this -> compressedSA.size() - 1;
             this -> hashMap[kmer_new].occurences += 1;
             i_temp++;
@@ -191,6 +195,7 @@ int main()
     cSA.printMap();
 
     cSA.compression(3);
+    cSA.printLCPArray();
     return 0;
 
 

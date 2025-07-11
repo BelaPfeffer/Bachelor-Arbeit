@@ -20,7 +20,7 @@ public:
     
     // Public search function
     std::vector<int> search(const std::string& pattern) const;
-
+    std::pair<std::vector<int>,std::vector<int>> search_val_and_pos(const std::string& pattern) const;
 protected:
     // Member variables
     std::string text;
