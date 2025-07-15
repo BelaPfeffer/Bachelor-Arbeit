@@ -4,6 +4,14 @@
 #include <algorithm>
 #include <iterator>  
 
+void CompressedSA::printCompressedSA()
+{
+    std::cout << "Compressed Suffix Array:\n";
+    for (unsigned long i = 0; i < compressedSA.size(); i++) {
+        std::cout << i << "\t" << compressedSA[i] << "\t" << this -> text.substr(compressedSA[i]) << "\n";
+    }
+    std::cout << "\n";
+}
 
 void CompressedSA::initHash(const std::string& kmer)
 {
@@ -23,7 +31,7 @@ void CompressedSA::initHashMap(const int k)
         std::string kmer_old = text.substr(pos, k);
         if (static_cast<int>(kmer_old.size()) < k || kmer_old.find('$') != std::string::npos)
         {
-            std::cout << "Kmer is shorter than k: " << kmer_old << "\n";
+            // std::cout << "Kmer is shorter than k: " << kmer_old << "\n";
             i++;
             continue;
         }
@@ -39,8 +47,9 @@ void CompressedSA::initHashMap(const int k)
         unsigned long steps = i;
         // std::cout << "i: " << i ;
         this -> initHash(kmer_old);
+
+        //jumps to next Bucket
         while (lcpArray[steps] >= k) steps++;
-        // std::cout << " step: " << step << "\n";
         
         
         i = steps + 1;
@@ -58,11 +67,12 @@ void CompressedSA::printMap(){
                   << ", occurences: " << value.occurences
                   << ", shift: " << value.shift
                   << ", trace: " << value.traceback 
+                  << ", processed: " << value.processed
                   << std::endl;
     }
 }
 
-unsigned long CompressedSA::findLCPmaxmin(const int k)
+std::pair<unsigned long, int> CompressedSA::findLCPmaxmin(const int k)
 {
     std::vector<int>& lcpArray = this -> lcpArray;
     auto maxIt = std::max_element(lcpArray.begin(), lcpArray.end());
@@ -82,38 +92,60 @@ unsigned long CompressedSA::findLCPmaxmin(const int k)
 
     auto minIt = std::min_element(lcpArray.begin() + lowerBound, lcpArray.begin() + upperBound);
     unsigned long minIndex = std::distance(lcpArray.begin(), minIt);
+    std::pair<unsigned long, int>minMax = {minIndex, lcpArray[minIndex]};
     std::fill(lcpArray.begin() + lowerBound, lcpArray.begin() + upperBound + k-1, -1);
-    this -> printLCPArray();
+    // this -> printLCPArray();
 
-    return minIndex;
+    return minMax;
     
 }
 
 void CompressedSA::compression (const int k)
 {
     this -> initHashMap(k);
-    this -> printSuffixArray();
+    // this -> printSuffixArray();
     const std::vector<int>& SuffixArray = this -> suffixArray;
     const std::string& text = this -> text;
+    std::pair<unsigned long, int> start = findLCPmaxmin (k);
+    unsigned long startIndex = start.first;
+    int LCPVal = start.second;
+    this -> printLCPArray();
 
-    unsigned long startIndex = findLCPmaxmin (k);
-    std::cout << "Minimum LCP index for k = " << k << ": " << startIndex << "\n";
+    std::cout << "LCPVal: " << LCPVal << "\n";
 
-    std::string pattern = text.substr(SuffixArray[startIndex]);
-    std::cout << "Pattern: " << pattern << "\n";
+    while (LCPVal > -1)
+    {
+       
+        std::cout << "Minimum LCP index for k = " << k << ": " << startIndex << "\n";
+        std::string pattern = text.substr(SuffixArray[startIndex]);
+        if (pattern.find('$') != std::string::npos || static_cast<int>(pattern.size()) < k)
+        {
+            
+            std::cout << "Pattern contains end character '$', skipping...\n";
+            this -> lcpArray[startIndex] = -1; // Mark as processed
+            start = findLCPmaxmin(k);
+            startIndex = start.first;
+            LCPVal = start.second;
+            std::cout << "Next startIndex: " << startIndex << "\n";
+            continue;
+        }
+        std::cout << "Pattern: " << pattern << "\n";
 
-    this -> readPattern(pattern, k);
+        this -> readPattern(pattern, k);
 
+        this -> printMap();
+        
+        this -> printLCPArray();
+
+        start = findLCPmaxmin(k);
+        startIndex = start.first;
+        LCPVal = start.second;
+    }
+
+    std::cout << "Compression finished.\n";
     this -> printMap();
-
-    
-
-
-
-
-
-
-
+    this -> printLCPArray();
+    this -> printCompressedSA();
 }
 
 void CompressedSA::readPattern (std::string& pattern, int k)
@@ -121,7 +153,7 @@ void CompressedSA::readPattern (std::string& pattern, int k)
     std::string kmer_old = pattern.substr(0, k);
     std::cout << "Kmer_old: " << kmer_old << "\n";
     std::pair<std::vector<int>, std::vector<int>> tempRes = this -> search_val_and_pos(kmer_old);
-    this -> compressedSA = tempRes.first;
+    this -> compressedSA = tempRes.first; 
     // std::cout << "Result size: " << tempResult.size() << "\n";
     this -> hashMap[kmer_old].kSAindex = 0;
     this -> hashMap[kmer_old].occurences = tempRes.first.size();
@@ -135,30 +167,40 @@ void CompressedSA::readPattern (std::string& pattern, int k)
     {
         std::string kmer_new = pattern.substr(i,k);
         std::cout << "Kmer: " << kmer_new << "\n";
+
+        if (this -> hashMap[kmer_new].processed)
+        {
+            std::cout << "Kmer already processed, skipping...\n";
+            break;
+        }
+
         tempRes = this -> search_val_and_pos(kmer_new);
         unsigned i_res = 0;
         unsigned i_temp = 0;
 
         while (i_res < old_res_size && i_temp < tempRes.first.size())
         {   
-              std::cout << "Flag: " << i << "\n";
+            //   std::cout << "Flag: " << i << "\n";
                 std::cout << "cSA.compressedSA[i_res] + shift : " << this -> compressedSA[i_res] + shift << "\n";
                 std::cout << "tempRes.first[i_temp]: " << tempRes.first[i_temp] << "\n";
                 std::cout << "shift: " << shift << "\n";
             if (this -> compressedSA[i_res] + shift == tempRes.first[i_temp] )
             {   
+                std::cout << "Chaining to compressedSA: " << this -> compressedSA[i_res] << "\n";
                 this -> lcpArray[tempRes.second[i_temp]] = -1;
                 i_res++;
                 i_temp++;
             }
             else
             {   
+                std::cout << "Adding to compressedSA: " << tempRes.first[i_temp] << "\n";
                 this -> compressedSA.push_back(tempRes.first[i_temp]);
                 this -> hashMap[kmer_new].kSAindex = this -> compressedSA.size() - 1;
                 this -> hashMap[kmer_new].occurences += 1;
                 this -> lcpArray[tempRes.second[i_temp]] = -1;
                 i_temp++;
             }
+
            
         }
 
@@ -182,6 +224,7 @@ void CompressedSA::readPattern (std::string& pattern, int k)
             i_temp++;
         }
         this -> hashMap[kmer_new].shift = shift;
+        this -> hashMap[kmer_new].processed = true;
         kmer_old = kmer_new;
         shift++;
     }
@@ -189,13 +232,14 @@ void CompressedSA::readPattern (std::string& pattern, int k)
 
 int main()
 {
-    CompressedSA cSA("ATAACCGA$ATGACCGA$ATAACCGA$CTAACCGA$ATAACCGA");
+    // CompressedSA cSA("ATAACCGA$ATGACCGA$ATAACCGA$CTAACCGA$ATAACCGA");
+    CompressedSA cSA("ATAACCGA$ATGACCGA");
     // CompressedSA c = CompressedSA();
-    cSA.initHashMap(3);
-    cSA.printMap();
+    // cSA.initHashMap(3);
+   
 
     cSA.compression(3);
-    cSA.printLCPArray();
+    
     return 0;
 
 
