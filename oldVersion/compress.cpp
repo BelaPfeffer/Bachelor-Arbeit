@@ -28,17 +28,24 @@ void CompressedSA::initHashMap(const int k)
     while(i < suffixArray.size())
     {
         int pos = suffixArray[i];
-        std::string kmer_old = text.substr(pos, k);
-        if (static_cast<int>(kmer_old.size()) < k || kmer_old.find('$') != std::string::npos)
+
+        if (pos + k > text.size() )
         {
             // std::cout << "Kmer is shorter than k: " << kmer_old << "\n";
             i++;
             continue;
         }
 
-        
+         std::string kmer = text.substr(pos, k);
 
-        for (unsigned long j = 0; j < kmer_old.size(); j++)
+        if(kmer.find('$') != std::string::npos)
+        {
+            i++;
+            continue;
+        }
+
+    
+        for (unsigned long j = 0; j < kmer.size(); j++)
         {
             std::cout << kmer_old[j];
         }
@@ -53,8 +60,6 @@ void CompressedSA::initHashMap(const int k)
         
         
         i = steps + 1;
-        
-
         
     }
     std::cout << "Map size: " << hashMap.size() << "\n";
