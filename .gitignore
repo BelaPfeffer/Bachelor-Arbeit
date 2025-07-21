@@ -1,2 +1,4 @@
+build/
+seqan3/
 *.out
 *.exe
