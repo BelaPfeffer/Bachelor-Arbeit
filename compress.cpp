@@ -153,11 +153,14 @@ void CompressedSA::readPattern (std::string& pattern, int k)
     std::string kmer_old = pattern.substr(0, k);
     std::cout << "Kmer_old: " << kmer_old << "\n";
     std::pair<std::vector<int>, std::vector<int>> tempRes = this -> search_val_and_pos(kmer_old);
-    this -> compressedSA = tempRes.first; 
+    this -> compressedSA.insert(compressedSA.end(), tempRes.first.begin(), tempRes.first.end());
+    std::cout << "CompressedSA: "   << "\n";
+    this -> printCompressedSA();
     // std::cout << "Result size: " << tempResult.size() << "\n";
     this -> hashMap[kmer_old].kSAindex = 0;
     this -> hashMap[kmer_old].occurences = tempRes.first.size();
     this -> hashMap[kmer_old].shift = -1; // no shift, because it is not dependent on another pattern
+    this -> hashMap[kmer_old].processed = true;
 
     int shift = 1;
 
@@ -232,8 +235,8 @@ void CompressedSA::readPattern (std::string& pattern, int k)
 
 int main()
 {
-    // CompressedSA cSA("ATAACCGA$ATGACCGA$ATAACCGA$CTAACCGA$ATAACCGA");
-    CompressedSA cSA("ATAACCGA$ATGACCGA");
+    CompressedSA cSA("ATAACCGA$ATGACCGA$ATAACCGA$CTAACCGA$ATAACCGA");
+    // CompressedSA cSA("ATAACCGA$ATGACCGA");
     // CompressedSA c = CompressedSA();
     // cSA.initHashMap(3);
    
