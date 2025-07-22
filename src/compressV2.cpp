@@ -13,11 +13,11 @@ void CompressedSA::printCompressedSA()
     std::cout << "\n";
 }
 
-void CompressedSA::printMap()
+void CompressedSA::printMap(uint64_t k)
 {
     for (const auto& [key, value] : this -> hashMap) {
         std::cout << "Key: \"" << key << "\""
-                  << ", Decoded_Key: " << decode_dna5(key, 2) // Assuming k=2 for decoding
+                  << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
                   << ", kSAindex: " << value.kSAindex
                   << ", occurences: " << value.occurences
                   << ", shift: " << value.shift

@@ -48,7 +48,7 @@ private:
 
 
 public:
-    void printMap();
+    void printMap(uint64_t k);
 
     void printCompressedSA();
 
