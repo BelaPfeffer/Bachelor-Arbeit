@@ -1,0 +1,17 @@
+C++ Programm Benchmark Report
+============================
+Programm: my_app
+Pfad: ./../build/my_app
+Datum: Mi 23 Jul 2025 14:29:21 CEST
+System: Darwin 87-77-26-72.mna.fu-berlin.de 23.4.0 Darwin Kernel Version 23.4.0: Fri Mar 15 00:12:41 PDT 2024; root:xnu-10063.101.17~1/RELEASE_ARM64_T8103 arm64
+Anzahl Läufe: 3
+
+Ergebnisse:
+-----------
+Durchschnittliche Runtime: N/A Sekunden
+Durchschnittlicher Peak Memory: 9.85 MB
+
+Einzelne Läufe:
+Lauf 1: Runtime=0,01s, Memory=9.85MB, CPU=%
+Lauf 2: Runtime=0,01s, Memory=9.85MB, CPU=%
+Lauf 3: Runtime=0,01s, Memory=9.85MB, CPU=%
