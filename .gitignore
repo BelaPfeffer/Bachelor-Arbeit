@@ -1,4 +1,5 @@
 build/
+benchmark_results_*/
 seqan3/
 *.out
 *.exe
