@@ -22,6 +22,16 @@
         });
     }
     
+    size_t SuffixArray::memoryUsageBytes() const {
+        size_t size = sizeof(*this);
+
+        size += text.capacity() * sizeof(char);
+        size += suffixArray.capacity() * sizeof(int);
+        size += lcpArray.capacity() * sizeof(int);
+
+        return size;
+    }
+
     // Effizientere Implementierung mit O(n log n) Komplexität
     void SuffixArray::buildSuffixArrayOptimized() {
         int n = text.length();

@@ -50,6 +50,8 @@ private:
 public:
     void printMap(uint64_t k);
 
+    size_t memoryUsageBytes() const;
+    
     void printCompressedSA();
 
     hashValue getHashMapValue(const std::string& kmer);

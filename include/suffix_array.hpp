@@ -18,6 +18,7 @@ public:
     const std::string& getText() const ;
     void printSuffixArray() const;
     void printLCPArray() const;
+    virtual size_t memoryUsageBytes() const;
     
     // Public search function
     std::vector<int> search(const std::string& pattern) const;
@@ -34,4 +35,4 @@ protected:
     void buildLCPArray();              // Kasai's algorithm
 };
 
-#endif // SUFFIXARRAY_H
+#endif // SUFFIXARRAY_H{

@@ -3,3 +3,5 @@ benchmark_results_*/
 seqan3/
 *.out
 *.exe
+
+.DS_Store

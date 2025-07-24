@@ -1,10 +1,7 @@
-#include <iostream>
-#include <zlib.h>
+#include "fastaParser.hpp"
 
-#include "suffix_array.hpp"
-#include "compressV2.hpp"
 
-std::vector<std::pair<std::string, std::string>> parseFasta (std::string path)
+std::string parseFasta (std::string path)
 {
     gzFile file = gzopen(path.c_str(), "r");
     if (!file) {
@@ -47,28 +44,11 @@ std::vector<std::pair<std::string, std::string>> parseFasta (std::string path)
         std::cout << ">" << id << "\n" << seq << "\n";
     }
 
-    return sequences;
-}
-
-
-int main(int argc, char* argv[])
-{
-    std::string filepath = argv[1];
-    unsigned k = std::stoul(argv[2]);
-    std::vector<std::pair<std::string, std::string>> fastaData = parseFasta(filepath);
-
     std::string concatenatedText;
-    for (const auto& [id, seq] : fastaData) {
+    for (const auto& [id, seq] : sequences) {
         concatenatedText += seq + "$"; // Append a special end character
     }
     std::cout << "Concatenated text: " <<  concatenatedText << "\n";
 
-    CompressedSA csa (concatenatedText);
-    csa.initHashMap(k);
-
-    csa.printSuffixArray();
-    csa.printMap(k);
-
+    return concatenatedText;
 }
-
-   

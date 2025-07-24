@@ -13,7 +13,26 @@ void CompressedSA::printCompressedSA()
     std::cout << "\n";
 }
 
-void CompressedSA::printMap(uint64_t k)
+ size_t CompressedSA::memoryUsageBytes() const {
+    size_t size = sizeof(*this); // Speicher für CompressedSA selbst
+
+    // Dynamisch belegter Speicher im Vektor
+    size += compressedSA.capacity() * sizeof(int);
+
+    // Dynamisch belegter Speicher in der Hashmap
+    size += hashMap.size() * (sizeof(uint64_t) + sizeof(hashValue));
+
+    // Optional: Wenn load factor hoch ist, ist capacity > size:
+    size += (hashMap.bucket_count() - hashMap.size()) * (sizeof(void*) + sizeof(size_t)); // ungefähr
+
+    // Speicher aus der Basisklasse (SuffixArray)
+    size += SuffixArray::memoryUsageBytes(); 
+
+    return size;
+}
+
+
+    void CompressedSA::printMap(uint64_t k)
 {
     for (const auto& [key, value] : this -> hashMap) {
         std::cout << "Key: \"" << key << "\""
