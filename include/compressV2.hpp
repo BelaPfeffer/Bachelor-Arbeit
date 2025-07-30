@@ -2,7 +2,7 @@
 #include <tuple>
 #include <string>
 #include "suffix_array.hpp"
-
+// #include <sdsl/construct_sa.hpp>  // for calculate_sa
 struct hashValue
 {   //=================================================================
     //KMER steht im komprimierten Suffix Array

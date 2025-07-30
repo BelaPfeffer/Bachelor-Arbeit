@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <sdsl/suffix_arrays.hpp>
+
 
 class SuffixArray {
 public:
