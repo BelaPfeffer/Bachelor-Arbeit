@@ -2,7 +2,16 @@
 #include <tuple>
 #include <string>
 #include "suffix_array.hpp"
-// #include <sdsl/construct_sa.hpp>  // for calculate_sa
+
+#include <sdsl/csa_bitcompressed.hpp>
+#include <sdsl/suffix_array_algorithm.hpp>
+#include <sdsl/lcp_bitcompressed.hpp>
+#include <sdsl/construct_lcp.hpp>
+
+using namespace sdsl;
+
+
+
 struct hashValue
 {   //=================================================================
     //KMER steht im komprimierten Suffix Array
@@ -35,6 +44,12 @@ struct hashValue
 class CompressedSA : public SuffixArray
 {
 private:
+    std::string text; // Originaltext
+
+    csa_bitcompressed<> suffixArray;
+
+    lcp_bitcompressed<> lcpArray;
+
     std::unordered_map<uint64_t, hashValue> hashMap;
 
     std::vector<int> compressedSA;
@@ -67,6 +82,13 @@ public:
     void initHash(const uint64_t& kmere);
 
     CompressedSA() = default;
-    CompressedSA(const std::string& input) : SuffixArray(input) {}
-    ~CompressedSA() = default;
+    CompressedSA(const std::string& input) 
+    {
+        text = input;
+        construct_im(suffixArray, text, 1);
+        construct_im(lcpArray, text, 1);
+        for (unsigned long i = 0; i < suffixArray.size(); i++) {
+            std::cout << "i: " << i << ", char: " << suffixArray[i] << ", lcp: " << lcpArray[i] << std::endl;
+        }
+    }
 };

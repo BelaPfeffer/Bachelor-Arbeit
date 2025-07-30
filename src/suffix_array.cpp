@@ -143,7 +143,7 @@
     void SuffixArray::printLCPArray() const {
         std::cout << "\nLCP Array:\n";
         std::cout << "Index\tLCP\tSuffix 1\t\tSuffix 2\n";
-        for (unsigned long i = 0; i < lcpArray.size(); i++) {
+        for (unsigned long i = 0; i < lcpArray.size() - 1; i++) {
             std::cout << i << "\t" << lcpArray[i] << "\t" 
                       << text.substr(suffixArray[i]) << "\t\t" 
                       << text.substr(suffixArray[i + 1]) << "\n";

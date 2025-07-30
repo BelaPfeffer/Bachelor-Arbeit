@@ -39,7 +39,7 @@ void BM_uncompressedSA(benchmark::State& state) {
         CompressedSA compressedSA(fastaData);
 
         // Verhindert, dass der Compiler die Erstellung des Objekts wegoptimiert.
-        benchmark::DoNotOptimize(compressedSA);
+        // benchmark::DoNotOptimize(compressedSA);
     }
 
     // 3. Setzen der Counter (nach der Schleife!)

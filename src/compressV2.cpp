@@ -53,9 +53,6 @@ void CompressedSA::initHash(const uint64_t& kmer)
 
 void CompressedSA::initHashMap(const unsigned k)
 {
-    const std::vector<int>& suffixArray = this->suffixArray;
-    const std::vector<int>& lcpArray = this->lcpArray;
-    const std::string& text = this->text;
     unsigned long i = 0;
 
     while(i < suffixArray.size())
