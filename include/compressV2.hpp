@@ -65,6 +65,8 @@ private:
 public:
     void printMap(uint64_t k);
 
+    void printSuffixArray() const;
+
     size_t memoryUsageBytes() const;
     
     void printCompressedSA();
@@ -87,8 +89,6 @@ public:
         text = input;
         construct_im(suffixArray, text, 1);
         construct_im(lcpArray, text, 1);
-        for (unsigned long i = 0; i < suffixArray.size(); i++) {
-            std::cout << "i: " << i << ", char: " << suffixArray[i] << ", lcp: " << lcpArray[i] << std::endl;
-        }
+        std::cout <<"lcp Size:" << lcpArray.size() << std::endl;
     }
 };

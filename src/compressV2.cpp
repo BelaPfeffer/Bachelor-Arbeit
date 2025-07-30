@@ -66,7 +66,9 @@ void CompressedSA::initHashMap(const unsigned k)
             continue;
         }
 
-         std::string kmer = text.substr(pos, k);
+        std::string kmer = text.substr(pos, k);
+        // std::cout << "Kmer: " << kmer << "\n";
+        // std::cout << "pos: " << pos << "\n";
 
         if(kmer.find('$') != std::string::npos)
         {
@@ -82,15 +84,22 @@ void CompressedSA::initHashMap(const unsigned k)
         }
         std::cout << "\n";
 
-        unsigned long steps = i;
+        unsigned long steps = i + 1;
+        if(steps == suffixArray.size())
+        {
+            break;
+        }
+        // std::cout << "steps: " << steps << "\n";
         
 
-        //jumps to next Bucket
-        while (static_cast<unsigned>(lcpArray[steps]) >= k) steps++;
         
-        
-        i = steps + 1;
-        
+        while (static_cast<unsigned>(lcpArray[steps]) >= k) {steps++; };
+        // std::cout << "lcp loopend:" << std::endl;
+   
+
+
+        i = steps;
+
     }
     std::cout << "Map size: " << hashMap.size() << "\n";
 }
@@ -154,5 +163,13 @@ void CompressedSA::setValue(const uint64_t encodedKmer, const unsigned long kSAi
 
     this->hashMap[encodedKmer].occurences = occurences;
 }
+
+ void CompressedSA::printSuffixArray() const {
+        std::cout << "Suffix Array:\n";
+        std::cout << "Index\tPosText\tLCP\tSuffix\n";
+        for (unsigned long i = 0; i < suffixArray.size(); i++) {
+            std::cout << i << "\t"<<suffixArray[i] << "\t" << lcpArray[i] << "\t" << text.substr(suffixArray[i]) << "\n";
+        }
+    }
 
 

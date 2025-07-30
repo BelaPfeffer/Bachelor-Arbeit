@@ -27,6 +27,7 @@ int main(int argc, char* argv[])
     
     CompressedSA csa (fastaData);
     csa.initHashMap(k);
+    csa.printSuffixArray();
     csa.printMap(k);
 
     // csa.printSuffixArray();
