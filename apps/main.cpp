@@ -25,9 +25,12 @@ int main(int argc, char* argv[])
     // }
 
     
-    CompressedSA csa (fastaData);
-    csa.initHashMap(k);
+    CompressedSA csa (fastaData, k);
     csa.printSuffixArray();
+    
+    lcp_interval interval = csa.get_lcp_interval(11,k);
+
+    csa.compression(k, interval);
     csa.printMap(k);
 
     // csa.printSuffixArray();

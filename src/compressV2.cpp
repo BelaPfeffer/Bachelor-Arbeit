@@ -37,7 +37,7 @@ void CompressedSA::printCompressedSA()
     for (const auto& [key, value] : this -> hashMap) {
         std::cout << "Key: \"" << key << "\""
                   << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
-                  << ", kSAindex: " << value.kSAindex
+                  << ", cSAindex: " << value.cSAindex
                   << ", occurences: " << value.occurences
                   << ", shift: " << value.shift
                   << ", trace: " << value.traceback_key 
@@ -122,7 +122,7 @@ uint64_t CompressedSA::encode_dna5(const std::string& kmer)
     return encoded;
 }
 
-std::string CompressedSA::decode_dna5(uint64_t encoded, int k)
+std::string CompressedSA::decode_dna5(uint64_t encoded, unsigned k)
 {
     std::string decoded;
     for (int i = 0; i < k; ++i) {
@@ -149,27 +149,102 @@ hashValue CompressedSA::getHashMapValue(const std::string& kmer)
 
 void CompressedSA::setReferenceValue(const uint64_t encodedKmer, const int shift, const uint64_t traceback_key, const bool processed)
 {
-    this->hashMap[encodedKmer].traceback_key = traceback_key;
-    
-    this->hashMap[encodedKmer].shift = shift;
-
-    this->hashMap[encodedKmer].processed = processed;
+    this -> hashMap[encodedKmer].setReferenceValue(shift, traceback_key, processed);
 }
 
 
-void CompressedSA::setValue(const uint64_t encodedKmer, const unsigned long kSAindex, const unsigned long occurences) // Index im komprimierten Suffix Array
+void CompressedSA::setValue(const uint64_t encodedKmer, const unsigned long cSAindex, const unsigned long occurences) // Index im komprimierten Suffix Array
 {
-    this->hashMap[encodedKmer].kSAindex = kSAindex;
-
-    this->hashMap[encodedKmer].occurences = occurences;
+   this ->hashMap[encodedKmer].setValue(cSAindex, occurences);
 }
 
- void CompressedSA::printSuffixArray() const {
+void CompressedSA::printSuffixArray() const 
+{
         std::cout << "Suffix Array:\n";
-        std::cout << "Index\tPosText\tLCP\tSuffix\n";
+        std::cout << "Index\tPosText\tLCP\tbitvektor\tSuffix\n";
         for (unsigned long i = 0; i < suffixArray.size(); i++) {
-            std::cout << i << "\t"<<suffixArray[i] << "\t" << lcpArray[i] << "\t" << text.substr(suffixArray[i]) << "\n";
+            std::cout << i << "\t"<<suffixArray[i] << "\t" << lcpArray[i] << "\t" << computeSuffix[i] << "\t" << text.substr(suffixArray[i]) << "\n";
         }
+}
+
+
+
+
+lcp_interval CompressedSA::get_lcp_interval(unsigned  i, unsigned k) 
+{
+    const sdsl::lcp_bitcompressed<>& lcp = lcpArray;
+    unsigned long n = lcp.size() + 1; // Because LCP array has size n - 1
+    unsigned long left = i;
+    unsigned long right = i;
+    unsigned long min_index = i;
+
+    // Expand to the left
+    while (left > 0 && lcp[left - 1] >= k) {
+         if (lcp[left] < lcp[min_index]) {
+            min_index = left;
+        }
+        --left;
     }
 
+    // Expand to the right
+    while (right < n - 1 && lcp[right] >= k) {
+        if (lcp[right] < lcp[min_index]) {
+            min_index = right;
+        }
+        ++right;
+    }
 
+    return lcp_interval(left, right, min_index);
+}
+
+
+//wird true wenn wert valid
+bool CompressedSA::filterSA(const int k, unsigned i)
+{
+    unsigned long suffix = suffixArray[i];
+    if (suffix + k > text.size()) {
+        return false; // Suffix is too short to contain a k-mer of length k
+    }
+    else if( text.substr(suffix, k).find('$') != std::string::npos) {
+        return false; // Suffix contains the end character '$'
+    }
+    return true;
+}
+
+void CompressedSA::initComputeSuffix(unsigned k)
+{
+    computeSuffix = bit_vector(suffixArray.size());
+    for (unsigned long i = 0; i < suffixArray.size(); i++) {
+        if (filterSA(k, i)) {
+            computeSuffix[i] = 1; // Mark this suffix as valid
+        } else {
+            computeSuffix[i] = 0; // Mark this suffix as invalid
+        }
+    }
+}
+
+void CompressedSA::compression(const unsigned k, lcp_interval& interval)
+{
+    unsigned pattern = suffixArray[interval.min_index]; // Index des Musters in der SA
+    unsigned long occurences = interval.right - interval.left + 1; // Anzahl der Vorkommen des Musters
+    uint64_t kmer_old = encode_dna5(text.substr(pattern, k));
+    setValue(kmer_old, compressedSA.size() - 1, occurences); // das könnte probleme geben wenn compressed SA noch leer ist
+
+
+    // ab hier nochmal gucken
+
+    int shift = 1;
+
+    unsigned text_index = pattern + shift + k - 1;
+
+    for (unsigned long i = pattern + shift; text[text_index] != '$'; i ++) {
+        
+        unsigned kmer_new = encode_dna5(text.substr(i,k));
+        setReferenceValue(kmer_new, shift, hashMap[kmer_old].cSAindex, true);
+
+        text_index ++;
+        shift++;
+    
+    }
+
+}

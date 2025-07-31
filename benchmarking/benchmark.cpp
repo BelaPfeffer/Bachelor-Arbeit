@@ -2,6 +2,7 @@
 #include <sys/resource.h>
 #include "compressV2.hpp"
 #include "fastaParser.hpp"
+#include "suffix_array.hpp"
 #include <vector>
 #include <string>
 
@@ -36,7 +37,7 @@ void BM_uncompressedSA(benchmark::State& state) {
     // 2. Die eigentliche Messschleife (misst die Zeit)
     for (auto _ : state) {
         // Das ist die Operation, deren Zeit wir messen wollen.
-        CompressedSA compressedSA(fastaData);
+        SuffixArray SA(fastaData);
 
         // Verhindert, dass der Compiler die Erstellung des Objekts wegoptimiert.
         // benchmark::DoNotOptimize(compressedSA);
@@ -49,8 +50,8 @@ void BM_uncompressedSA(benchmark::State& state) {
     // Optional: Berichte auch die Differenz, falls das für dich interessant ist.
     state.counters["Delta RSS (KB)"] = mem_after - mem_before;
 
-    CompressedSA compressedSA(fastaData);
-    state.counters["Exact Memory (Byte)"] = compressedSA.memoryUsageBytes(); // Umrechnung in KB
+    SuffixArray SA(fastaData);
+    state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes(); // Umrechnung in KB
 }
 
 
