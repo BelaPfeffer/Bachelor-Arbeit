@@ -28,7 +28,9 @@ int main(int argc, char* argv[])
     CompressedSA csa (fastaData, k);
     csa.printSuffixArray();
     
-    lcp_interval interval = csa.get_lcp_interval(11,k);
+    lcp_interval interval = csa.get_lcp_interval(14,k);
+
+    std::cout << "Interval: " << interval.left << " " << interval.right << " " << interval.min_index << "\n";
 
     csa.compression(k, interval);
     csa.printMap(k);

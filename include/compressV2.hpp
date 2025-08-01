@@ -14,10 +14,11 @@ using namespace sdsl;
 
 struct lcp_interval
 {
-    unsigned long left; // Start index of the interval
-    unsigned long right;   // End index of the interval
-    unsigned long min_index; // Minimum LCP value in the interval
-    lcp_interval(unsigned long s, unsigned long e, unsigned long m) : left(s), right(e), min_index(m){};
+    typename csa_bitcompressed<>::size_type left; // Start index of the interval
+    typename csa_bitcompressed<>::size_type right;   // End index of the interval
+    typename csa_bitcompressed<>::size_type min_index; // Minimum LCP value in the interval
+    lcp_interval(typename csa_bitcompressed<>::size_type s, typename csa_bitcompressed<>::size_type e, typename csa_bitcompressed<>::size_type m) : left(s), right(e), min_index(m){};
+    lcp_interval() : left(0), right(0), min_index(0) {}; // Default constructor
 };
 
 
@@ -25,7 +26,7 @@ struct lcp_interval
 struct hashValue
 {   //=================================================================
     //KMER steht im komprimierten Suffix Array
-    unsigned long cSAindex; // Index im komprimierten Suffix Array
+    std::vector <unsigned long> cSAindex; // Index im komprimierten Suffix Array
     unsigned long occurences; // Anzahl der Vorkommen
     //=================================================================
     //REFERENZ auf anderes Pattern, von dem dieses abhängt
@@ -37,7 +38,7 @@ struct hashValue
     
     hashValue()
     {
-        cSAindex = 0; // noch nicht initialisiert
+        cSAindex = std::vector <unsigned long>(); // noch nicht initialisiert
         occurences = 0; // noch nicht initialisiert
         shift = -1;  // noch nicht initialisiert
         traceback_key = 0; // noch nicht initialisiert
@@ -46,8 +47,9 @@ struct hashValue
 
     void setValue (unsigned long cSAindex, unsigned long occurences)
     {
-        this->cSAindex = cSAindex;
-        this->occurences = occurences;
+        this->cSAindex.push_back(cSAindex); 
+        this->occurences += occurences;
+        this -> processed = true;
     }
 
     void setReferenceValue(int shift, unsigned traceback_key, bool processed)

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <iterator>  
 
+#include <sdsl/suffix_array_algorithm.hpp>
+
 void CompressedSA::printCompressedSA()
 {
     std::cout << "Compressed Suffix Array:\n";
@@ -35,9 +37,12 @@ void CompressedSA::printCompressedSA()
     void CompressedSA::printMap(uint64_t k)
 {
     for (const auto& [key, value] : this -> hashMap) {
+        if (value.processed == false) {
+            continue; // Skip uninitialized entries
+        }
         std::cout << "Key: \"" << key << "\""
                   << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
-                  << ", cSAindex: " << value.cSAindex
+                  << ", cSAindex: " << value.cSAindex.size()
                   << ", occurences: " << value.occurences
                   << ", shift: " << value.shift
                   << ", trace: " << value.traceback_key 
@@ -225,23 +230,49 @@ void CompressedSA::initComputeSuffix(unsigned k)
 
 void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 {
-    unsigned pattern = suffixArray[interval.min_index]; // Index des Musters in der SA
+    unsigned long current_csa_index = compressedSA.empty() ? 0 : compressedSA.size();
+    unsigned pat_pos_index = suffixArray[interval.min_index]; // Index des Musters im text 
     unsigned long occurences = interval.right - interval.left + 1; // Anzahl der Vorkommen des Musters
-    uint64_t kmer_old = encode_dna5(text.substr(pattern, k));
-    setValue(kmer_old, compressedSA.size() - 1, occurences); // das könnte probleme geben wenn compressed SA noch leer ist
+    uint64_t kmer_old = encode_dna5(text.substr(pat_pos_index, k));
+    setValue(kmer_old, current_csa_index, occurences); // das könnte probleme geben wenn compressed SA noch leer ist
 
 
     // ab hier nochmal gucken
 
     int shift = 1;
 
-    unsigned text_index = pattern + shift + k - 1;
+    unsigned text_index = pat_pos_index + shift + k - 1;
 
-    for (unsigned long i = pattern + shift; text[text_index] != '$'; i ++) {
-        
+    for (unsigned long i = pat_pos_index + shift; text[text_index] != '$'; i ++) {
+
+        lcp_interval temp_interval = lcp_interval();
+        auto count = backward_search(suffixArray,0 , suffixArray.size() - 1, 
+                                    text.begin() + i, text.begin() + i + k,
+                                    temp_interval.left, temp_interval.right);
+
         unsigned kmer_new = encode_dna5(text.substr(i,k));
-        setReferenceValue(kmer_new, shift, hashMap[kmer_old].cSAindex, true);
 
+        while (count > occurences)
+        {
+            unsigned long x = 0;
+            unsigned long y = 0;
+            auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
+            auto text_pos_kmer_old = suffixArray[pat_pos_index + y];
+
+            if (text_pos_kmer_new != text_pos_kmer_old)
+            {
+                setValue(kmer_new, compressedSA.size(), 1);
+                y++;
+                count--;
+                continue;
+            }
+            x++;
+            y++;
+        }
+
+        
+        
+        setReferenceValue(kmer_new, shift, hashMap[kmer_old].cSAindex[0], true);
         text_index ++;
         shift++;
     
