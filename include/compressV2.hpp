@@ -18,8 +18,9 @@ struct lcp_interval
     typename csa_bitcompressed<>::size_type left; // Start index of the interval
     typename csa_bitcompressed<>::size_type right;   // End index of the interval
     typename csa_bitcompressed<>::size_type min_index; // Minimum LCP value in the interval
+    unsigned priority;
     lcp_interval(typename csa_bitcompressed<>::size_type s, typename csa_bitcompressed<>::size_type e, typename csa_bitcompressed<>::size_type m) : left(s), right(e), min_index(m){};
-    lcp_interval() : left(0), right(0), min_index(0) {}; // Default constructor
+    lcp_interval() : left(0), right(0), min_index(0), priority(0) {}; // Default constructor
 };
 
 
@@ -81,7 +82,7 @@ private:
 
     rank_support_v<> rankSupport; // Rank support for computeSuffix
 
-    std::vector<lcp_interval> lcpIntervals; // Stores LCP intervals
+    std::vector<std::optional<lcp_interval>> lcpIntervals; // Stores LCP intervals
 
     std::unordered_map<uint64_t, hashValue> hashMap;
 
@@ -129,11 +130,13 @@ public:
 
     lcp_interval get_lcp_interval(unsigned i, unsigned k);
 
-    void printIntervals();
+    void printIntervals(unsigned k);
 
     unsigned getInterval(unsigned i);
 
-    void findLCPintervals (const unsigned k);
+    void initLCPintervalsAndHashmap (const unsigned k);
+
+    unsigned calc_priority(lcp_interval& interval) const;
 
     CompressedSA() = default;
     CompressedSA(const std::string& input, unsigned k) 
@@ -143,6 +146,8 @@ public:
         construct_im(lcpArray, text, 1);
         initComputeSuffix(k);
         util::init_support(rankSupport, &computeSuffix);
-        findLCPintervals(k);
+        initLCPintervalsAndHashmap(k);
     }
+
+    void runCompression(const unsigned k);
 };

@@ -1,7 +1,9 @@
 #include "compressV2.hpp"
 #include "suffix_array.hpp"
 #include <iostream>
+#include <numeric>
 #include <algorithm>
+#include <cmath>
 #include <iterator>  
 
 #include <sdsl/suffix_array_algorithm.hpp>
@@ -271,16 +273,20 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
     for (unsigned long i = pat_pos_index + shift; i <= text.size() - k; i ++) {
         std::cout << "pat_pos_index + shift:" << pat_pos_index + shift << "\n";
 
-        lcp_interval temp_interval = lcp_interval();
-        auto count = backward_search(suffixArray,0 , suffixArray.size() - 1, 
-                                    text.begin() + i, text.begin() + i + k,
-                                    temp_interval.left, temp_interval.right);
+        unsigned kmer_new = encode_dna5(text.substr(i,k));
+        unsigned interval_index = hashMap[kmer_new].lcp_interval_index;
+        lcp_interval temp_interval;
+
+        if (lcpIntervals[interval_index].has_value()) 
+        {
+            temp_interval = lcpIntervals[interval_index].value();
+        }
+
+        unsigned count = temp_interval.right - temp_interval.left + 1;
 
         if (!computeSuffix[temp_interval.left]) {
             continue; // Skip if the suffix is not valid
         }
-
-        unsigned kmer_new = encode_dna5(text.substr(i,k));
 
         std::cout << "count: " << count << ", occurences: " << occurences << "\n";
         unsigned long x = 0;
@@ -312,6 +318,7 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 
         this -> printCompressedSA();
         setBits(temp_interval, 0); // Markiere alle Suffixe im Intervall als computed
+        lcpIntervals[interval_index] = std::nullopt; // Setze das Intervall auf uninitialisiert
         setReferenceValue(kmer_new, shift, hashMap[kmer_old].cSAindex[0], true);
         text_index ++;
         shift++;
@@ -320,12 +327,19 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 
 }
 
-void CompressedSA::printIntervals()
-{
+void CompressedSA::printIntervals(unsigned k)
+{   
+    unsigned long i = 0;
     for (const auto& interval : lcpIntervals)
     {
-        std::cout << "Interval: " << "[" << interval.left 
-                  << ", " << interval.right << "],min: " << interval.min_index << "\n";
+        if (!interval.has_value()) {
+            std::cout<< "Index: " << i << ", Interval is uninitialized.\n";
+            i++;
+            continue; // Skip uninitialized intervals
+        }
+        std::cout <<"Index: " << i << ", Interval: " << "[" << interval->left
+                  << ", " << interval->right << "],min: " << interval->min_index << ", priority: " << interval->priority << ", kmer: " << text.substr(suffixArray[interval->min_index], k) << "\n";
+        i++;
     }
 }
 
@@ -333,7 +347,7 @@ unsigned CompressedSA::getInterval(unsigned index)
 {
     for (unsigned i = 0; i < lcpIntervals.size(); i++)
     {
-        if (index >= lcpIntervals[i].left && index <= lcpIntervals[i].right)
+        if (index >= lcpIntervals[i] -> left && index <= lcpIntervals[i] -> right)
         {
             return i;
         }
@@ -341,12 +355,24 @@ unsigned CompressedSA::getInterval(unsigned index)
     throw std::out_of_range("Kein Intervall gefunden");
 }
 
-void CompressedSA::findLCPintervals(const unsigned k)
+unsigned CompressedSA::calc_priority(lcp_interval& interval) const
+{   
+    uint32_t quotient_lcp = 0;
+    for (size_t i = interval.left; i <= interval.right; i++)
+    {
+        quotient_lcp += lcpArray[i];
+    }
+    quotient_lcp = std::ceil(quotient_lcp / (interval.right - interval.left + 1));
+    return quotient_lcp;
+}
+
+void CompressedSA::initLCPintervalsAndHashmap(const unsigned k)
 {
     unsigned i = sdsl::util::next_bit(computeSuffix,0);
     while (i < lcpArray.size())
     {
         lcp_interval interval = get_lcp_interval(i,k);
+        interval.priority = calc_priority(interval);
 
         if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
         {
@@ -369,19 +395,16 @@ void CompressedSA::findLCPintervals(const unsigned k)
     }
 }
 
-// void CompressedSA::runCompression(const unsigned k)
-// {   
-//     lcp_intervals
+void CompressedSA::runCompression(const unsigned k)
+{   
+    std::vector<unsigned> interval_indeces (lcpIntervals.size());
+    std::iota(interval_indeces.begin(), interval_indeces.end(), 0);
+    std::sort(interval_indeces.begin(), interval_indeces.end(), [this](unsigned i1, unsigned i2) { return lcpIntervals[i1] -> priority > lcpIntervals[i2] -> priority; });
 
-//     while (sdsl::util::next_bit(computeSuffix) != computeSuffix.bit_size())
-//     {
-//         unsigned long lcp_index = getOptimalLCPIndex(interval, k);//existiert noch nicht
-//         lcp_interval interval = get_lcp_interval(lcp_index, k);
-
-
-
-
-
-
-//     }
-// }
+    for (unsigned long i = 0; i < interval_indeces.size(); i++)
+    {
+        lcp_interval interval = lcpIntervals[interval_indeces[i]].value();
+        std::string kmer = text.substr(suffixArray[interval.min_index], k);
+        std::cout << "Index: " << interval_indeces[i] << ", Priority: " << lcpIntervals[interval_indeces[i]] -> priority << "kmer: "<< kmer << "\n";
+    }
+}

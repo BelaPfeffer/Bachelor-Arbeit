@@ -30,12 +30,13 @@ int main(int argc, char* argv[])
     
     lcp_interval interval = csa.get_lcp_interval(11,k);
 
-    
-
+    csa.runCompression(k);
+    csa.printIntervals(k);
     csa.compression(k, interval);
+    csa.printIntervals(k);
     csa.printMap(k);
-    csa.printIntervals();
-    // csa.printSuffixArray();
+    csa.printSuffixArray();
+    
     
 
     // csa.printSuffixArray();
