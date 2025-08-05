@@ -9,6 +9,7 @@
 #include <sdsl/lcp_bitcompressed.hpp>
 #include <sdsl/construct_lcp.hpp>
 #include <sdsl/bit_vectors.hpp>
+#include <sdsl/util.hpp>
 
 using namespace sdsl;
 
@@ -28,6 +29,7 @@ struct hashValue
     //KMER steht im komprimierten Suffix Array
     std::vector <unsigned long> cSAindex; // Index im komprimierten Suffix Array
     unsigned long occurences; // Anzahl der Vorkommen
+    unsigned long lcp_interval_index; // Index des LCP Intervalls
     //=================================================================
     //REFERENZ auf anderes Pattern, von dem dieses abhängt
     int shift; // Verschiebung im Text (wenn -1 dann gibt keine Verschriebung d.h. nicht von anderem Pattern abhängig
@@ -77,6 +79,10 @@ private:
 
     bit_vector computeSuffix;
 
+    rank_support_v<> rankSupport; // Rank support for computeSuffix
+
+    std::vector<lcp_interval> lcpIntervals; // Stores LCP intervals
+
     std::unordered_map<uint64_t, hashValue> hashMap;
 
     std::vector<int> compressedSA;
@@ -92,11 +98,18 @@ private:
 
 
 public:
+    void setBits(lcp_interval& iv, bool bitVal);
+
     void printMap(uint64_t k);
 
     bool filterSA (const int k, unsigned i);
 
     void printSuffixArray() const;
+
+    lcp_bitcompressed<> get_lcp_array() const
+    {
+        return lcpArray;
+    }
 
     size_t memoryUsageBytes() const;
     
@@ -108,13 +121,19 @@ public:
 
     void setValue(const uint64_t encodedKmer, const unsigned long cSAindex, const unsigned long occurences);
 
-    void initHashMap(const unsigned k);
+    // void initHashMap(const unsigned k);
 
     void compression (const unsigned k, lcp_interval& interval);
 
-    void initHash(const uint64_t& kmere);
+    void initHash(const uint64_t& kmere, unsigned long lcp_interval_index);
 
     lcp_interval get_lcp_interval(unsigned i, unsigned k);
+
+    void printIntervals();
+
+    unsigned getInterval(unsigned i);
+
+    void findLCPintervals (const unsigned k);
 
     CompressedSA() = default;
     CompressedSA(const std::string& input, unsigned k) 
@@ -123,8 +142,7 @@ public:
         construct_im(suffixArray, text, 1);
         construct_im(lcpArray, text, 1);
         initComputeSuffix(k);
-        initHashMap(k);
-        lcp_interval interval = get_lcp_interval( 0, k);
-
+        util::init_support(rankSupport, &computeSuffix);
+        findLCPintervals(k);
     }
 };
