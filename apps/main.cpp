@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     CompressedSA csa (fastaData, k);
     csa.printMap(k);
     csa.printIntervals(k);
-    // csa.printSuffixArray();
+    csa.printSuffixArray();
     csa.runCompression(k);
     // csa.printIntervals(k);
     

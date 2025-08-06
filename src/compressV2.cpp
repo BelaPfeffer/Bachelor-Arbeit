@@ -48,7 +48,7 @@ void CompressedSA::printMap(uint64_t k)
 
         std::string csaIndexes = "[";
         for (const auto& index : value.cSAindex) {
-            csaIndexes += std::to_string(index) + "";
+            csaIndexes += std::to_string(index) + ",";
         }
 
         csaIndexes += "]";
@@ -254,13 +254,26 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 
     //copies the suffixArray data in the compressedSA
     std::copy(suffixArray.begin() + interval.left, suffixArray.begin() + interval.right + 1, std::back_inserter(compressedSA));
+
     unsigned pat_pos_index = suffixArray[interval.min_index]; // Index des Musters im text
     unsigned long occurences = interval.right - interval.left + 1;  // Anzahl der Vorkommen des Musters
     unsigned long current_csa_index = compressedSA.size() - occurences;
+
+    std::cout << "current_csa_index: " << current_csa_index << "\n";
+    std::cout << "occurences: " << occurences << "\n";
+
     uint64_t kmer_old = encode_dna5(text.substr(pat_pos_index, k));
+
+
     setValue(kmer_old, current_csa_index, occurences); // das könnte probleme geben wenn compressed SA noch leer ist
+    lcpIntervals[hashMap[kmer_old].lcp_interval_index] = std::nullopt; 
+    //wenn ich diese Zeilen Rausnehme könnte man Ringschluss bilden sodass die anzahl der Gespeicherten Suffixe noch kleiner wird. 
+    //BSP.: Ich habe ACCGA als erstes Kompressionspattern benutzt später finde ich dann ATACCGA -> ACCGA kann in Abhängigkeit von 
+    //ATACCGA dargestellt werden -> alle Pattern die in Abhängigkeit von ACCGA dargestellt werden können auch mit ATACCGA dargestellt werden.
+    //Dazu müsste man nur ACCGA aus SA löschen und in Abhängigkeit von ATACCGA's Position im Text darstellen.
 
     setBits(interval, 0); // Markiere alle Suffixe im Intervall als computed
+
     std::cout << "Suffix: " << text.substr(pat_pos_index) << "\n";
 
     this -> printCompressedSA();
@@ -279,26 +292,27 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 
         unsigned kmer_new = encode_dna5(text.substr(i,k));
 
-        if ((kmer_new & mask) > 0) continue; //kmer contains $
+        if ((kmer_new & mask) > 0) {shift++; continue;} //kmer contains $
 
         std::cout << "kmer_new: " << decode_dna5(kmer_new,k) << std::endl;
         unsigned interval_index = hashMap[kmer_new].lcp_interval_index;
         printMap(k);
         lcp_interval temp_interval;
 
-        if (lcpIntervals[interval_index] == std::nullopt) // Interval already computed
+        if (lcpIntervals[interval_index] == std::nullopt) // Interval already computed or no valid kmer in Interval
         {
             std::cout << "skipped 1" << std::endl;
+            shift++;
             continue;
         }
 
         temp_interval = lcpIntervals[interval_index].value();
         unsigned count = rankSupport(temp_interval.right + 1) - rankSupport(temp_interval.left);
 
-        if (count == 0) {
-            std::cout << "skipped 2" << std::endl;    //interval already computed or no valid kmer in interval
-            continue; 
-        }
+        // if (count == 0) {
+        //     std::cout << "skipped 2" << std::endl;    //interval already computed or no valid kmer in interval
+        //     continue; 
+        // }
 
         
         unsigned long x = 0;
@@ -389,6 +403,7 @@ void CompressedSA::initLCPintervalsAndHashmap(const unsigned k)
 
         if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
         {
+            // lcpIntervals.push_back(std::nullopt;);
             i = interval.right + 1;
             continue; // Skip if no valid k-mer in interval
         }
