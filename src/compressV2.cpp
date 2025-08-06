@@ -53,9 +53,9 @@ void CompressedSA::printMap(uint64_t k)
 
         csaIndexes += "]";
 
-        if (value.processed == false) {
-            continue; // Skip uninitialized entries
-        }
+        // if (value.processed == false) {
+        //     continue; // Skip uninitialized entries
+        // }
         std::cout << "Key: \"" << key << "\""
                   << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
                   << ", cSAindex: " << csaIndexes
@@ -244,7 +244,8 @@ void CompressedSA::initComputeSuffix(unsigned k)
 
 void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 {
-
+    std::cout << "rankCalc: " << rankSupport(interval.right + 1) - rankSupport(interval.left) << "\n";
+    // Check 
     if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
     {
         std::cout << "Interval already computed or no valid kmer in interval.\n";
@@ -260,6 +261,7 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
     setValue(kmer_old, current_csa_index, occurences); // das könnte probleme geben wenn compressed SA noch leer ist
 
     setBits(interval, 0); // Markiere alle Suffixe im Intervall als computed
+    std::cout << "Suffix: " << text.substr(pat_pos_index) << "\n";
 
     this -> printCompressedSA();
     this -> printMap(k);
@@ -267,32 +269,43 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
     // ab hier nochmal gucken
 
     int shift = 1;
+    int mask = 0b100100100;
 
     unsigned text_index = pat_pos_index + shift;
 
-    for (unsigned long i = pat_pos_index + shift; i <= text.size() - k; i ++) {
-        std::cout << "pat_pos_index + shift:" << pat_pos_index + shift << "\n";
+    for (unsigned long i = pat_pos_index + shift; i <= text.size() - k; i ++) 
+    {
+        std::cout << "i: " << i << "\n";
 
         unsigned kmer_new = encode_dna5(text.substr(i,k));
+
+        if ((kmer_new & mask) > 0) continue; //kmer contains $
+
+        std::cout << "kmer_new: " << decode_dna5(kmer_new,k) << std::endl;
         unsigned interval_index = hashMap[kmer_new].lcp_interval_index;
+        printMap(k);
         lcp_interval temp_interval;
 
-        if (lcpIntervals[interval_index].has_value()) 
+        if (lcpIntervals[interval_index] == std::nullopt) // Interval already computed
         {
-            temp_interval = lcpIntervals[interval_index].value();
+            std::cout << "skipped 1" << std::endl;
+            continue;
         }
 
-        unsigned count = temp_interval.right - temp_interval.left + 1;
+        temp_interval = lcpIntervals[interval_index].value();
+        unsigned count = rankSupport(temp_interval.right + 1) - rankSupport(temp_interval.left);
 
-        if (!computeSuffix[temp_interval.left]) {
-            continue; // Skip if the suffix is not valid
+        if (count == 0) {
+            std::cout << "skipped 2" << std::endl;    //interval already computed or no valid kmer in interval
+            continue; 
         }
 
-        std::cout << "count: " << count << ", occurences: " << occurences << "\n";
+        
         unsigned long x = 0;
         unsigned long y = 0;
         auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
         auto text_pos_kmer_old = suffixArray[interval.left + y];
+        std::cout << "count: " << count << ", occurences: " << occurences << ", kmer: " <<text.substr(text_pos_kmer_new,k) <<  "\n";
 
         while (count > occurences)
         {
@@ -399,7 +412,7 @@ void CompressedSA::runCompression(const unsigned k)
 {   
     std::vector<unsigned> interval_indeces (lcpIntervals.size());
     std::iota(interval_indeces.begin(), interval_indeces.end(), 0);
-    std::sort(interval_indeces.begin(), interval_indeces.end(), [this](unsigned i1, unsigned i2) { return lcpIntervals[i1] -> priority > lcpIntervals[i2] -> priority; });
+    std::sort(interval_indeces.begin(), interval_indeces.end(), [this](unsigned i1, unsigned i2) { return lcpIntervals[i1] -> priority < lcpIntervals[i2] -> priority; });
 
     for (unsigned long i = 0; i < interval_indeces.size(); i++)
     {
@@ -407,4 +420,27 @@ void CompressedSA::runCompression(const unsigned k)
         std::string kmer = text.substr(suffixArray[interval.min_index], k);
         std::cout << "Index: " << interval_indeces[i] << ", Priority: " << lcpIntervals[interval_indeces[i]] -> priority << "kmer: "<< kmer << "\n";
     }
-}
+
+    unsigned prio_index;
+    lcp_interval curr_interval;
+
+    unsigned empty = 0;
+
+    for (int i = interval_indeces.size() - 1; i >= 0; i--)
+    {
+        std::cout << "interval.size(): " << interval_indeces.size() << "\n";
+        if(lcpIntervals[interval_indeces[i]] == std::nullopt) 
+        {
+            interval_indeces.pop_back();    
+            empty++; 
+            continue;
+        }
+
+        prio_index = interval_indeces.back();
+        interval_indeces.pop_back();
+        curr_interval = lcpIntervals[prio_index].value();
+        compression(k, curr_interval);
+
+    }
+    std::cout << "isEmpty: " << interval_indeces.empty() << ", Intervals skipped: " << empty << "\n";
+}       

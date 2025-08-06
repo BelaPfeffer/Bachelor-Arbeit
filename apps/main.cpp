@@ -20,27 +20,14 @@ int main(int argc, char* argv[])
 
     
     CompressedSA csa (fastaData, k);
-    csa.printSuffixArray();
-    
-
-
-    // csa.findLCPintervals(k);
-
-
-    
-    lcp_interval interval = csa.get_lcp_interval(11,k);
-
-    csa.runCompression(k);
-    csa.printIntervals(k);
-    csa.compression(k, interval);
-    csa.printIntervals(k);
     csa.printMap(k);
-    csa.printSuffixArray();
-    
-    
-
+    csa.printIntervals(k);
     // csa.printSuffixArray();
-    // csa.printMap(k);
+    csa.runCompression(k);
+    // csa.printIntervals(k);
+    
+    // csa.printSuffixArray();
+    
 
 }
 
