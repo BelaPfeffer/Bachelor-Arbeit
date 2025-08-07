@@ -34,6 +34,7 @@ struct hashValue
     //=================================================================
     //REFERENZ auf anderes Pattern, von dem dieses abhängt
     int shift; // Verschiebung im Text (wenn -1 dann gibt keine Verschriebung d.h. nicht von anderem Pattern abhängig
+    unsigned long refOccurrences;
     unsigned traceback_key; // Referenz auf das andere Pattern (kann nullptr sein, wenn es kein anderes Pattern gibt)
     bool processed;
                // sondern direkt in SA)
@@ -44,6 +45,7 @@ struct hashValue
         cSAindex = std::vector <unsigned long>(); // noch nicht initialisiert
         occurences = 0; // noch nicht initialisiert
         shift = -1;  // noch nicht initialisiert
+        refOccurrences = 0; // noch nicht 
         traceback_key = 0; // noch nicht initialisiert
         processed = false; // noch nicht initialisiert
     }
@@ -55,9 +57,10 @@ struct hashValue
         this -> processed = true;
     }
 
-    void setReferenceValue(int shift, unsigned traceback_key, bool processed)
+    void setReferenceValue(int shift, unsigned long refOccurrences, unsigned traceback_key, bool processed)
     {
         this->shift = shift;
+        this->refOccurrences = refOccurrences;
         this->traceback_key = traceback_key;
         this->processed = processed;
     }
@@ -90,6 +93,10 @@ private:
 
     void initComputeSuffix(unsigned k);
 
+    void initLCPintervalsAndHashmap (const unsigned k);
+
+    void initHash(const uint64_t& kmere, unsigned long lcp_interval_index);
+
     void readPattern (std::string& pattern, unsigned k);
 
     uint64_t encode_dna5(const std::string& kmer);
@@ -118,7 +125,7 @@ public:
 
     hashValue getHashMapValue(const std::string& kmer);
 
-    void setReferenceValue(const uint64_t encodedKmer, const int shift, const uint64_t traceback_key,  const bool processed);
+    void setReferenceValue(const uint64_t encodedKmer, const int shift, unsigned long refOcurrences, const uint64_t traceback_key,  const bool processed);
 
     void setValue(const uint64_t encodedKmer, const unsigned long cSAindex, const unsigned long occurences);
 
@@ -126,7 +133,7 @@ public:
 
     void compression (const unsigned k, lcp_interval& interval);
 
-    void initHash(const uint64_t& kmere, unsigned long lcp_interval_index);
+   
 
     lcp_interval get_lcp_interval(unsigned i, unsigned k);
 
@@ -134,9 +141,11 @@ public:
 
     unsigned getInterval(unsigned i);
 
-    void initLCPintervalsAndHashmap (const unsigned k);
-
     unsigned calc_priority(lcp_interval& interval) const;
+
+    void runCompression(const unsigned k);
+
+    std::vector<int> findPattern(std::string& kmer, unsigned k);
 
     CompressedSA() = default;
     CompressedSA(const std::string& input, unsigned k) 
@@ -149,5 +158,5 @@ public:
         initLCPintervalsAndHashmap(k);
     }
 
-    void runCompression(const unsigned k);
+    
 };
