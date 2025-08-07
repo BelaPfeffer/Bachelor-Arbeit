@@ -28,7 +28,7 @@ struct lcp_interval
 struct hashValue
 {   //=================================================================
     //KMER steht im komprimierten Suffix Array
-    std::vector <unsigned long> cSAindex; // Index im komprimierten Suffix Array
+    int cSAindex; // Index im komprimierten Suffix Array
     unsigned long occurences; // Anzahl der Vorkommen
     unsigned long lcp_interval_index; // Index des LCP Intervalls
     //=================================================================
@@ -42,7 +42,7 @@ struct hashValue
     
     hashValue()
     {
-        cSAindex = std::vector <unsigned long>(); // noch nicht initialisiert
+        cSAindex = -1; // noch nicht initialisiert
         occurences = 0; // noch nicht initialisiert
         shift = -1;  // noch nicht initialisiert
         refOccurrences = 0; // noch nicht 
@@ -52,7 +52,7 @@ struct hashValue
 
     void setValue (unsigned long cSAindex, unsigned long occurences)
     {
-        this->cSAindex.push_back(cSAindex); 
+        this->cSAindex = cSAindex; 
         this->occurences += occurences;
         this -> processed = true;
     }
@@ -120,6 +120,8 @@ public:
     }
 
     size_t memoryUsageBytes() const;
+
+    unsigned calc_priority2(lcp_interval& interval) const;
     
     void printCompressedSA();
 
