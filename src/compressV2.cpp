@@ -311,40 +311,54 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
         
         unsigned long x = 0;
         unsigned long y = 0;
-        auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
-        auto text_pos_kmer_old = suffixArray[interval.left + y];
+        
         // std::cout << "count: " << count << ", occurences: " << occurences << ", kmer: " <<text.substr(text_pos_kmer_new,k) <<  "\n";
 
-        while (count > occurences)
+        // std::cout << "text_pos_kmer_new: " << text_pos_kmer_new << ", text_pos_kmer_old + shift: " << text_pos_kmer_old + shift  << "\n";
+
+        while (count > occurences && occurences > 0)
         {
-            // std::cout << "text_pos_kmer_new: " << text_pos_kmer_new << ", text_pos_kmer_old + shift: " << text_pos_kmer_old + shift << "\n";
+            auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
+            auto text_pos_kmer_old = suffixArray[interval.left + y];
+            
 
             if (text_pos_kmer_new != (text_pos_kmer_old + shift) )
             {   
                 compressedSA.push_back(text_pos_kmer_new); 
                 setValue(kmer_new, compressedSA.size() - 1, 1);
-
-                std::cout << "Pattern for compression: " << text.substr(pat_pos_index,text.size()) << "\n";
-                std::cout << "text_pos_kmerr_new: " << text.substr(text_pos_kmer_new,k) <<", " << text_pos_kmer_new << "\n";
-                std::cout << "text_pos_kmerr_old + shift: " << text.substr(text_pos_kmer_old + shift,k) <<", " << text_pos_kmer_old + shift <<", shift: " << shift <<  "\n";
-                std::cout << "x :" << x << ", y: " << y << std::endl;
-                std::cout << "FLAG" << std::endl;
-                std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
-
                 x++;
                 count--;
+                std::cout << "x :" << x << ", y: " << y << std::endl;
+                std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
                 
-
                 
-                text_pos_kmer_new = suffixArray[temp_interval.left + x];
                 continue;
             }
             
             x++;
             y++;
-            text_pos_kmer_new = suffixArray[temp_interval.left + x];
-            text_pos_kmer_old = suffixArray[interval.left + y];
-            // std::cout << "checkpoint" << std::endl;
+            std::cout << "x :" << x << ", y: " << y << std::endl;
+            std::cout << "Pattern for compression: " << text.substr(pat_pos_index,text.size()) << "\n";
+            std::cout << "text_pos_kmerr_new: " << text.substr(text_pos_kmer_new,k) <<", " << text_pos_kmer_new << "\n";
+            std::cout << "text_pos_kmerr_old + shift: " << text.substr(text_pos_kmer_old + shift,k) <<", " << text_pos_kmer_old + shift <<", shift: " << shift <<  "\n";
+            std::cout <<" temp_interval.left + x: " << temp_interval.left + x << " SuffixArray.size(): " << suffixArray.size() << std::endl;
+            std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
+            std::cout << "FLAG" << std::endl;
+            count--;
+            occurences--;
+        }
+
+        if(occurences < count)
+        {   
+            while(count > 0)
+            {   
+                auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
+                compressedSA.push_back(text_pos_kmer_new);
+                setValue(kmer_new, compressedSA.size() - 1, 1);
+                x++;
+                count--;
+            }
+            
         }
 
         // this -> printCompressedSA();
@@ -424,7 +438,7 @@ void CompressedSA::initLCPintervalsAndHashmap(const unsigned k)
     while (i < lcpArray.size())
     {
         lcp_interval interval = get_lcp_interval(i,k);
-        interval.priority = calc_priority2(interval);
+        interval.priority = calc_priority(interval);
 
         if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
         {
@@ -518,7 +532,7 @@ std::vector<int> CompressedSA::findPattern(std::string& kmer, unsigned k)
         unsigned trace = curr_value.traceback_key;
         unsigned long refOcc = curr_value.refOccurrences;
         int shift = curr_value.shift;
-        std::cout << "trace: " << trace << ", refOcc: " << refOcc << ", shift: " << shift << "\n";
+        // std::cout << "trace: " << trace << ", refOcc: " << refOcc << ", shift: " << shift << "\n";
 
         for (unsigned long i = trace; i < trace + refOcc; i++)
         {
