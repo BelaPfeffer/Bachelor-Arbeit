@@ -24,6 +24,8 @@
   # This line remains the same
   add_executable(benchmark_script benchmark.cpp)
 
+  target_compile_definitions(benchmark_script PRIVATE BENCHMARK_MODE)
+
   # This line also remains the same. The target names provided by FetchContent
   # are identical to the ones from find_package, making the switch seamless.
   target_link_libraries(benchmark_script

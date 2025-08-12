@@ -23,8 +23,6 @@ struct lcp_interval
     lcp_interval() : left(0), right(0), min_index(0), priority(0) {}; // Default constructor
 };
 
-
-
 struct hashValue
 {   //=================================================================
     //KMER steht im komprimierten Suffix Array
@@ -72,7 +70,7 @@ struct hashValue
 
 
 
-class CompressedSA : public SuffixArray
+class CompressedSA 
 {
 private:
     std::string text; // Originaltext
@@ -159,6 +157,4 @@ public:
         util::init_support(rankSupport, &computeSuffix);
         initLCPintervalsAndHashmap(k);
     }
-
-    
 };

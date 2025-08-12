@@ -40,15 +40,16 @@ std::string parseFasta (std::string path)
     gzclose(file);
 
     // Print loaded sequences
-    for (auto &[id, seq] : sequences) {
-        std::cout << ">" << id << "\n" << seq << "\n";
-    }
+    // for (auto &[id, seq] : sequences) {
+    //     std::cout << ">" << id << "\n" << seq << "\n";
+    // }
 
     std::string concatenatedText;
     for (const auto& [id, seq] : sequences) {
         concatenatedText += seq + "$"; // Append a special end character
     }
-    std::cout << "Concatenated text: " <<  concatenatedText << "\n";
+    // std::cout << "Concatenated text: " <<  concatenatedText << "\n";
+    std::cout << "Parsing done. Concatenated text length: " << concatenatedText.length() << "\n";
 
     return concatenatedText;
 }

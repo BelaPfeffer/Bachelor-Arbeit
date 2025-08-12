@@ -2,39 +2,11 @@
 #include "suffix_array.hpp"
 #include "compressV2.hpp"
 #include "fastaParser.hpp"
+#include "test.hpp"
 
 
 using namespace sdsl;
 
-
-void checkCalcPos(const std::string& kmer, const std::vector<int>& positions, const std::string& text, const unsigned k)
-{
-    
-    SuffixArray sa (text);
-    std::vector<int> verified_pos = sa.search(kmer);
-    bool found = false;
-
-    for (int pos : positions)
-    {
-        found = (kmer == text.substr(pos, k));
-    }
-
-    if (found && verified_pos.size() == positions.size())
-    {
-        std::cout << "alle Pattern Richtig ermittlet " << "\n";
-    }
-
-    else if(found && verified_pos.size() != positions.size())
-    {
-        std::cout << "alle Pattern nicht richtig ermittelt aber zu wenig " << "\n";
-
-    }
-    else
-    {
-        std::cout << "Pattern nicht richtig ermittelt " << "\n";
-    }
-    return;
-}
 
 
 int main(int argc, char* argv[])
@@ -59,14 +31,7 @@ int main(int argc, char* argv[])
     csa.printCompressedSA();
 
     std::vector<int> result = csa.findPattern(kmer_to_find, k);
-    checkCalcPos(kmer_to_find, result, fastaData, k);
-
-    
-    // csa.printIntervals(k);
-    
-    // csa.printSuffixArray();
-    
-
+    testCorrectness(fastaData, kmer_to_find, result);
 }
 
    

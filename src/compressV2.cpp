@@ -23,39 +23,12 @@ void CompressedSA::printCompressedSA()
     std::cout << "\n";
 }
 
- size_t CompressedSA::memoryUsageBytes() const {
-    size_t size = sizeof(*this); // Speicher für CompressedSA selbst
-
-    // Dynamisch belegter Speicher im Vektor
-    size += compressedSA.capacity() * sizeof(int);
-
-    // Dynamisch belegter Speicher in der Hashmap
-    size += hashMap.size() * (sizeof(uint64_t) + sizeof(hashValue));
-
-    // Optional: Wenn load factor hoch ist, ist capacity > size:
-    size += (hashMap.bucket_count() - hashMap.size()) * (sizeof(void*) + sizeof(size_t)); // ungefähr
-
-    // Speicher aus der Basisklasse (SuffixArray)
-    size += SuffixArray::memoryUsageBytes(); 
-
-    return size;
-}
 
 
 void CompressedSA::printMap(uint64_t k)
 {
     for (const auto& [key, value] : this -> hashMap) {
 
-        // std::string csaIndexes = "[";
-        // for (const auto& index : value.cSAindex) {
-        //     csaIndexes += std::to_string(index) + ",";
-        // }
-
-        // csaIndexes += "]";
-
-        // if (value.processed == false) {
-        //     continue; // Skip uninitialized entries
-        // }
         std::cout << "Key: \"" << key << "\""
                   << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
                   << ", cSAindex: " << value.cSAindex
@@ -76,58 +49,6 @@ void CompressedSA::initHash(const uint64_t& kmer, unsigned long lcp_interval_ind
 
 }
 
-// void CompressedSA::initHashMap(const unsigned k)
-// {
-//     unsigned long i = 0;
-
-//     while(i < suffixArray.size())
-//     {
-//         unsigned long pos = suffixArray[i];
-
-//         if (pos + k > text.size() )
-//         {
-//             // std::cout << "Kmer is shorter than k: " << kmer_old << "\n";
-//             i++;
-//             continue;
-//         }
-
-//         std::string kmer = text.substr(pos, k);
-//         // std::cout << "Kmer: " << kmer << "\n";
-//         // std::cout << "pos: " << pos << "\n";
-
-//         if(kmer.find('$') != std::string::npos)
-//         {
-//             i++;
-//             continue;
-//         }
-
-//         uint64_t encodedKmer = encode_dna5(kmer);
-//         this -> initHash(encodedKmer, lcpIntervals.size() - 1);
-//         for (unsigned long j = 0; j < kmer.size(); j++)
-//         {
-//             std::cout << kmer[j];
-//         }
-//         std::cout << "\n";
-
-//         unsigned long steps = i + 1;
-//         if(steps == suffixArray.size())
-//         {
-//             break;
-//         }
-//         // std::cout << "steps: " << steps << "\n";
-        
-
-        
-//         while (static_cast<unsigned>(lcpArray[steps]) >= k) {steps++; };
-//         // std::cout << "lcp loopend:" << std::endl;
-   
-
-
-//         i = steps;
-
-//     }
-//     std::cout << "Map size: " << hashMap.size() << "\n";
-// }
 
 uint64_t CompressedSA::encode_dna5(const std::string& kmer)
 {
@@ -245,7 +166,7 @@ void CompressedSA::initComputeSuffix(unsigned k)
 
 void CompressedSA::compression(const unsigned k, lcp_interval& interval)
 {
-    std::cout << "rankCalc: " << rankSupport(interval.right + 1) - rankSupport(interval.left) << "\n";
+    // std::cout << "rankCalc: " << rankSupport(interval.right + 1) - rankSupport(interval.left) << "\n";
     // Check 
     if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
     {
@@ -328,8 +249,8 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
                 setValue(kmer_new, compressedSA.size() - 1, 1);
                 x++;
                 count--;
-                std::cout << "x :" << x << ", y: " << y << std::endl;
-                std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
+                // std::cout << "x :" << x << ", y: " << y << std::endl;
+                // std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
                 
                 
                 continue;
@@ -337,13 +258,13 @@ void CompressedSA::compression(const unsigned k, lcp_interval& interval)
             
             x++;
             y++;
-            std::cout << "x :" << x << ", y: " << y << std::endl;
-            std::cout << "Pattern for compression: " << text.substr(pat_pos_index,text.size()) << "\n";
-            std::cout << "text_pos_kmerr_new: " << text.substr(text_pos_kmer_new,k) <<", " << text_pos_kmer_new << "\n";
-            std::cout << "text_pos_kmerr_old + shift: " << text.substr(text_pos_kmer_old + shift,k) <<", " << text_pos_kmer_old + shift <<", shift: " << shift <<  "\n";
-            std::cout <<" temp_interval.left + x: " << temp_interval.left + x << " SuffixArray.size(): " << suffixArray.size() << std::endl;
-            std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
-            std::cout << "FLAG" << std::endl;
+            // std::cout << "x :" << x << ", y: " << y << std::endl;
+            // std::cout << "Pattern for compression: " << text.substr(pat_pos_index,text.size()) << "\n";
+            // std::cout << "text_pos_kmerr_new: " << text.substr(text_pos_kmer_new,k) <<", " << text_pos_kmer_new << "\n";
+            // std::cout << "text_pos_kmerr_old + shift: " << text.substr(text_pos_kmer_old + shift,k) <<", " << text_pos_kmer_old + shift <<", shift: " << shift <<  "\n";
+            // std::cout <<" temp_interval.left + x: " << temp_interval.left + x << " SuffixArray.size(): " << suffixArray.size() << std::endl;
+            // std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
+            // std::cout << "FLAG" << std::endl;
             count--;
             occurences--;
         }
@@ -407,7 +328,7 @@ unsigned CompressedSA::calc_priority(lcp_interval& interval) const
     for (size_t i = interval.left + 1; i <= interval.right; i++) // left + 1 weil interval mit 4 Suffixen drei LCP_werte hat
     {
         quotient_lcp += lcpArray[i];
-        std::cout << "lcpVal: " << lcpArray[i] << "\n";
+        // std::cout << "lcpVal: " << lcpArray[i] << "\n";
     }
     quotient_lcp = std::ceil(quotient_lcp / (interval.right - interval.left + 1));
     return quotient_lcp;
@@ -415,7 +336,7 @@ unsigned CompressedSA::calc_priority(lcp_interval& interval) const
 
 unsigned CompressedSA::calc_priority2(lcp_interval& interval) const
 {   
-    std::cout << "FLAG" << std::endl;
+    // std::cout << "FLAG" << std::endl;
     uint32_t quotient_lcp = 0;
     uint32_t minimum = std::numeric_limits<uint32_t>::max();
     std::vector<uint32_t> calculations;
@@ -427,7 +348,7 @@ unsigned CompressedSA::calc_priority2(lcp_interval& interval) const
 
     std::transform(calculations.begin(), calculations.end(), calculations.begin(), [minimum](uint32_t x) { return x - minimum; });
     quotient_lcp = std::ceil(std::accumulate(calculations.begin(), calculations.end(), 0) / calculations.size());
-    std::cout << "quotient_lcp: " << quotient_lcp << "\n";
+    // std::cout << "quotient_lcp: " << quotient_lcp << "\n";
     return quotient_lcp;
  
 }
@@ -454,11 +375,11 @@ void CompressedSA::initLCPintervalsAndHashmap(const unsigned k)
         
         i = interval.right + 1; // Move to the next interval
 
-        for (unsigned long j = 0; j < kmer.size(); j++)
-        {
-            std::cout << kmer[j];
-        }
-        std::cout << "\n";
+        // for (unsigned long j = 0; j < kmer.size(); j++)
+        // {
+        //     std::cout << kmer[j];
+        // }
+        // std::cout << "\n";
     }
 }
 
@@ -548,3 +469,44 @@ std::vector<int> CompressedSA::findPattern(std::string& kmer, unsigned k)
     return positions;
 }
     
+size_t CompressedSA::memoryUsageBytes() const {
+    size_t totalMemory = 0;
+    
+    // 1. Original text string
+    totalMemory += text.capacity(); // Allocated capacity, not just size()
+    
+    // 2. SDSL compressed suffix array
+    totalMemory += size_in_bytes(suffixArray);
+    
+    // 3. SDSL LCP array
+    totalMemory += size_in_bytes(lcpArray);
+    
+    // 4. Bit vector for computeSuffix
+    totalMemory += size_in_bytes(computeSuffix);
+    
+    // 5. Rank support structure
+    totalMemory += size_in_bytes(rankSupport);
+    
+    // 6. LCP intervals vector
+    totalMemory += lcpIntervals.capacity() * sizeof(std::optional<lcp_interval>);
+    // Add memory for the actual lcp_interval objects inside optionals
+    for (const auto& opt_interval : lcpIntervals) {
+        if (opt_interval.has_value()) {
+            totalMemory += sizeof(lcp_interval);
+        }
+    }
+    
+    // 7. Hash map (more precise calculation)
+    totalMemory += hashMap.size() * (sizeof(uint64_t) + sizeof(hashValue));
+    // Hash map overhead: bucket array + node overhead
+    totalMemory += hashMap.bucket_count() * sizeof(void*); // bucket pointers
+    totalMemory += hashMap.size() * (sizeof(void*) + alignof(std::max_align_t)); // node overhead estimate
+    
+    // 8. Compressed SA vector
+    totalMemory += compressedSA.capacity() * sizeof(int);
+    
+    // 9. Object overhead (approximate)
+    totalMemory += sizeof(CompressedSA);
+    
+    return totalMemory;
+}
