@@ -1,7 +1,7 @@
 
 #include <benchmark/benchmark.h>
 #include <sys/resource.h>
-#include "compressV2.hpp"
+#include "compressedSA.hpp"
 #include "fastaParser.hpp"
 #include "suffix_array.hpp"
 #include <vector>
@@ -57,7 +57,7 @@ void BM_uncompressedSA(benchmark::State& state) {
 
 
 
-void BM_CompressedSA(benchmark::State& state) {
+void BM_compressedSA(benchmark::State& state) {
     // 1. One-time setup (not measured) - now just get reference to pre-parsed data
     long file_index = state.range(0);
     unsigned k = state.range(1);
@@ -69,7 +69,7 @@ void BM_CompressedSA(benchmark::State& state) {
     // 2. The actual measurement loop (measures time)
     for (auto _ : state) {
         // This is the operation whose time we want to measure.
-        CompressedSA csa(fastaData,k);
+        compressedSA csa(fastaData,k);
         // Prevent the compiler from optimizing away the object creation.
         benchmark::DoNotOptimize(&csa);
     }
@@ -81,8 +81,8 @@ void BM_CompressedSA(benchmark::State& state) {
     // Optional: Also report the difference if that's interesting to you.
     state.counters["Delta RSS (KB)"] = mem_after - mem_before;
     
-    SuffixArray SA(fastaData);
-    state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes();
+    compressedSA csa (fastaData,k);
+    state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
 }
 
 
@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
         // Register the uncompressed suffix array benchmark
         benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)->Arg(i);
          for (unsigned k = 2; k <= 4; k += 1) {  // k = 15, 20, 25
-        benchmark::RegisterBenchmark("BM_CompressedSA", &BM_CompressedSA)->Args({i, k});
+        benchmark::RegisterBenchmark("BM_compressedSA", &BM_compressedSA)->Args({i, k});
     }
         
         // You can easily add more benchmarks here that use the same parsed data

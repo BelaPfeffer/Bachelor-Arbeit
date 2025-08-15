@@ -2,6 +2,7 @@ add_library(compressionTools
     fastaParser.cpp
     compressV2.cpp
     suffix_array.cpp
+    compressedSA.cpp
     test.cpp
 )
 
