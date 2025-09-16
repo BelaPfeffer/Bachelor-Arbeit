@@ -16,6 +16,7 @@ void testCorrectness(const std::string& text, const std::string& kmer, const std
 
     std::cout << "Test Number of Occurences... ("<< output.size() << ")" << std::endl;
     std::cout << "\n";
+    std::cout << "correct Number of Occurences: " << output_pos.size() << ", " << "calculated Number of Occurences: " << output.size() << std::endl;
     assert(output.size() == output_pos.size());
     std::cout << "\n";
     std::cout << "Test Number of Occurences successful" << std::endl;

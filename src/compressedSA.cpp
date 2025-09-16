@@ -109,7 +109,7 @@ compressedSA compressedSA::compute (const std::string& fastaData, const unsigned
     std::unique_ptr<computeSA> csa = std::make_unique<computeSA>(fastaData, k);
     // csa -> printSuffixArray();
     // csa -> printIntervals(k);
-    // csa -> runCompression(k);
+    csa -> runCompression(k);
     // csa -> printMap(k);
     // csa -> printComputeSA();
     compressedSA e_csa = csa -> exportSA();
