@@ -4,6 +4,7 @@
 #include <tuple>
 #include <string>
 #include <utility> 
+#include <optional>
 #include "suffix_array.hpp"
 #include "hashValue.hpp"
 

@@ -16,6 +16,7 @@ public:
 
     // Public functions to get results or print them
     const std::vector<int>& getSuffixArray() const;
+    unsigned getSuffixArraySize() const { return suffixArray.size(); };
     const std::vector<int>& getLCPArray() const;
     const std::string& getText() const ;
     void printSuffixArray() const;

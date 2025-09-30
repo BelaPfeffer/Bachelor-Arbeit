@@ -2,6 +2,7 @@
 #include <benchmark/benchmark.h>
 #include <sys/resource.h>
 #include "compressedSA.hpp"
+#include "test.hpp"
 #include "fastaParser.hpp"
 #include "suffix_array.hpp"
 #include <random>
@@ -70,6 +71,7 @@ void BM_uncompressedSA(benchmark::State& state) {
     
     SuffixArray SA(fastaData);
     state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes();
+    state.counters["Suffix-Array.size()"] = SA.getSuffixArraySize();
 }
 
 
@@ -100,7 +102,10 @@ void BM_compressedSA(benchmark::State& state) {
     
     compressedSA csa (fastaData,k);
     state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
+    state.counters["Suffix-Array.size()"] = csa.getSuffixArraySize();
     std::string kmer = generate_random_sequence(k);
+    std::vector<int> result = csa.findPattern(kmer, k);
+    testCorrectness(fastaData, kmer, result);
 }
 
 
