@@ -4,8 +4,25 @@
 #include "compressedSA.hpp"
 #include "fastaParser.hpp"
 #include "suffix_array.hpp"
+#include <random>
 #include <vector>
 #include <string>
+
+std::string generate_random_sequence(size_t k) {
+    static const char nucleotides[] = {'A', 'C', 'G', 'T'};
+    
+    // Use a random device and Mersenne Twister engine
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(0, 3);
+
+    std::string seq;
+    seq.reserve(k);
+    for (size_t i = 0; i < k; ++i) {
+        seq.push_back(nucleotides[dist(gen)]);
+    }
+    return seq;
+}
 
 // Global variables for file paths and pre-parsed data
 static std::vector<std::string> g_test_files;
@@ -83,6 +100,7 @@ void BM_compressedSA(benchmark::State& state) {
     
     compressedSA csa (fastaData,k);
     state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
+    std::string kmer = generate_random_sequence(k);
 }
 
 
