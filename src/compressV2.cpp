@@ -216,7 +216,17 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
         if ((kmer_new & mask) > 0) {shift++; continue;} //kmer contains $
 
         // std::cout << "kmer_new: " << decode_dna5(kmer_new,k) << std::endl;
+        if (hashMap.find(kmer_new) == hashMap.end())
+        {
+            shift++;
+            continue;
+        }
         unsigned interval_index = hashMap[kmer_new].lcp_interval_index;
+        if (interval_index >= lcpIntervals.size())
+        {
+            shift++;
+            continue;
+        }
         // printMap(k);
         lcp_interval temp_interval;
 

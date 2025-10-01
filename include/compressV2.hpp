@@ -1,9 +1,11 @@
 #pragma once
 
 #include <map>
+#include <unordered_map>
 #include <tuple>
 #include <string>
-#include <utility> 
+#include <utility>
+#include <optional> 
 #include "suffix_array.hpp"
 #include "hashValue.hpp"
 

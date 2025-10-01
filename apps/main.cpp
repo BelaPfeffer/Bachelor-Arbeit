@@ -15,6 +15,10 @@ using namespace sdsl;
 
 int main(int argc, char* argv[])
 {
+    if (argc < 4) {
+        std::cerr << "Usage: program <fasta_file> <kmer> <k>\n";
+        return 1;
+    }
 
     std::string filepath = argv[1];
     std::string kmer_to_find = argv[2];

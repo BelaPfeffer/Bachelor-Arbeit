@@ -24,6 +24,7 @@ struct hashValue
         refOccurrences = 0; // noch nicht 
         traceback_key = 0; // noch nicht initialisiert
         processed = false; // noch nicht initialisiert
+        lcp_interval_index = 0; // default; set explicitly when inserted
     }
 
     void setValue (unsigned long cSAindex, unsigned long occurences)
