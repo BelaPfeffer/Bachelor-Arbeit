@@ -394,7 +394,7 @@ void computeSA::runCompression(const unsigned k)
     {
         lcp_interval interval = lcpIntervals[interval_indeces[i]].value();
         std::string kmer = text.substr(suffixArray[interval.min_index], k);
-        std::cout << "Index: " << interval_indeces[i] << ", Priority: " << lcpIntervals[interval_indeces[i]] -> priority << "kmer: "<< kmer << "\n";
+        // std::cout << "Index: " << interval_indeces[i] << ", Priority: " << lcpIntervals[interval_indeces[i]] -> priority << "kmer: "<< kmer << "\n";
     }
 
     unsigned prio_index;

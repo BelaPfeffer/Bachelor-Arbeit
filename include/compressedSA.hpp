@@ -15,6 +15,7 @@ private:
     std::string text;
 
 public:
+unsigned csasize() const { return CSA.size(); }
     void printMap(uint64_t k)
 {
     for (const auto& [key, value] : this -> hashMap) {
