@@ -124,18 +124,25 @@ lcp_interval computeSA::get_lcp_interval(unsigned i, unsigned k)
     // Expand to the left
     while (left > 0 && lcp[left] >= k) {
         --left;
-        if (lcp[left] < lcp[min_index]) {
-            min_index = left;
-        }
     }
     
     // Expand to the right
     while (right < n - 2 && lcp[right + 1] >= k) {
         ++right;
-        if (lcp[right] < lcp[min_index]) {
-            min_index = right;
-        }
     }
+
+    
+    if (left != right)
+    {
+      min_index = left + 1;  
+      for (unsigned long j = left + 1; j <= right; j++) {
+          if (lcp[j] < lcp[min_index]) {
+              min_index = j;
+          }
+      }   
+    }
+    
+    std::cout << "minLCPIndex: " << min_index << ", minLCPValue: " << lcp[min_index] << ", left: " << left << ", right: " << right << "\n";
     
     return lcp_interval(left, right, min_index);
 }
@@ -178,7 +185,9 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
     //copies the suffixArray data in the CSA
     std::copy(suffixArray.begin() + interval.left, suffixArray.begin() + interval.right + 1, std::back_inserter(CSA));
     
-    unsigned pat_pos_index = suffixArray[interval.min_index]; // Index des Musters im text
+    unsigned pat_pos_index = suffixArray[interval.min_index];
+    unsigned pattern_length = lcpArray[interval.min_index];
+    // std::cout << "Index des Musters im Text: " << pat_pos_index << ", Länge des Musters: " << pattern_length << "\n";
     unsigned long occurences = interval.right - interval.left + 1;  // Anzahl der Vorkommen des Musters im SuffixArray
     unsigned long current_csa_index = CSA.size() - occurences;
 
@@ -204,10 +213,12 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
 
     int shift = 1;
     int mask = 0b100100100;
-
+    ////HIER IST DER BUG DRIN
     unsigned text_index = pat_pos_index + shift;
 
-    for (unsigned long i = pat_pos_index + shift; i <= text.size() - k; i ++) 
+    if (pattern_length <= k) return; // Pattern ist nur ein kmer lang
+
+    for (unsigned long i = pat_pos_index + shift; i < pat_pos_index + pattern_length - k; i ++) 
     {
         // std::cout << "i: " << i << "\n";
 
@@ -374,7 +385,6 @@ void computeSA::initLCPintervalsAndHashmap(const unsigned k)
 
         if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
         {
-            // lcpIntervals.push_back(std::nullopt;);
             i = interval.right + 1;
             continue; // Skip if no valid k-mer in interval
         }
@@ -392,6 +402,8 @@ void computeSA::initLCPintervalsAndHashmap(const unsigned k)
         // }
         // std::cout << "\n";
     }
+    // printSuffixArray();
+    // printIntervals (k);
 }
 
 void computeSA::runCompression(const unsigned k)
@@ -409,7 +421,7 @@ void computeSA::runCompression(const unsigned k)
 
     unsigned prio_index;
     lcp_interval curr_interval;
-
+    
     unsigned empty = 0;
 
     for (int i = interval_indeces.size() - 1; i >= 0; i--)
@@ -424,10 +436,12 @@ void computeSA::runCompression(const unsigned k)
 
         prio_index = interval_indeces.back();
         interval_indeces.pop_back();
+        std::cout << "Interval Index: " << prio_index << ", Priority: " << lcpIntervals[prio_index] -> priority << "\n";
         curr_interval = lcpIntervals[prio_index].value();
         compression(k, curr_interval);
 
     }
+    printMap(k);
     // std::cout << "isEmpty: " << interval_indeces.empty() << ", Intervals skipped: " << empty << "\n";
 }
 

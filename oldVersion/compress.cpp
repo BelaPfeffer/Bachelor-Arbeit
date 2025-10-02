@@ -237,18 +237,3 @@ void CompressedSA::readPattern (std::string& pattern, int k)
         shift++;
     }
 }
-
-int main()
-{
-    CompressedSA cSA("ATAACCGA$ATGACCGA$ATAACCGA$CTAACCGA$ATAACCGA");
-    // CompressedSA cSA("ATAACCGA$ATGACCGA");
-    // CompressedSA c = CompressedSA();
-    // cSA.initHashMap(3);
-   
-
-    cSA.compression(3);
-    
-    return 0;
-
-
-}

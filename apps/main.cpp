@@ -3,6 +3,7 @@
 #include "compressV2.hpp"
 #include "fastaParser.hpp"
 #include "test.hpp"
+#include <algorithm>
 #include "compressedSA.hpp"
 #include <memory>
 
@@ -28,6 +29,7 @@ int main(int argc, char* argv[])
     
     compressedSA e_csa (fastaData, k);
     std::vector<int> result = e_csa.findPattern(kmer_to_find, k);
+    std::sort(result.begin(), result.end());
     testCorrectness(fastaData, kmer_to_find, result);
 }
 

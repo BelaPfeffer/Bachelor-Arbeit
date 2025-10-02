@@ -54,12 +54,12 @@ std::vector<int> compressedSA::findPattern(std::string& kmer, unsigned k)
 
     isReference = (curr_value.refOccurrences != 0);
     isinCSA = (curr_value.occurences != 0);
-    std::cout << "isReference: " << isReference << ", isinCSA: " << isinCSA << "\n";
+    // std::cout << "isReference: " << isReference << ", isinCSA: " << isinCSA << "\n";
     if(isinCSA)
     {   
         unsigned occ = curr_value.occurences;
         unsigned csa_index = curr_value.cSAindex; 
-        std::cout << "csa_index: " << csa_index << ", occ: " << occ << "\n";
+        // std::cout << "csa_index: " << csa_index << ", occ: " << occ << "\n";
         for (unsigned long i = csa_index; i < csa_index + occ; i++)
         {
             positions.emplace_back(CSA[i]);
@@ -113,5 +113,7 @@ compressedSA compressedSA::compute (const std::string& fastaData, const unsigned
     // csa -> printMap(k);
     // csa -> printComputeSA();
     compressedSA e_csa = csa -> exportSA();
+    // e_csa.printMap(k);
+
     return e_csa;
 }

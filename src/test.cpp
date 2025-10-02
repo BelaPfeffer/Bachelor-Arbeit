@@ -1,6 +1,7 @@
 #include "test.hpp"
 #include <sdsl/suffix_array_algorithm.hpp>
 #include <cassert>
+#include <algorithm>
 #include <iostream>
 
 using namespace sdsl;
@@ -10,13 +11,21 @@ void testCorrectness(const std::string& text, const std::string& kmer, const std
     csa_bitcompressed<> csa;
     construct_im(csa, text, 1);
     int_vector<64> output = locate(csa, kmer);
+    std::sort(output.begin(), output.end());
+    
+    std::string correct_pos = "[";
+    for (unsigned long i = 0; i < output.size(); i++) {
+        correct_pos += std::to_string(output[i]) + ",";
+    }
+    correct_pos[correct_pos.size() - 1] = ']';
+    std::cout << "Correct Positions: " << correct_pos << "\n";
 
     std::cout << "Start Test for kmer: " << kmer << std::endl;
     std::cout << "\n";
 
     std::cout << "Test Number of Occurences... ("<< output.size() << ")" << std::endl;
     std::cout << "\n";
-    std::cout << "correct Number of Occurences: " << output_pos.size() << ", " << "calculated Number of Occurences: " << output.size() << std::endl;
+    std::cout << "correct Number of Occurences: " << output.size() << ", " << "calculated Number of Occurences: " << output_pos.size() << std::endl;
     assert(output.size() == output_pos.size());
     std::cout << "\n";
     std::cout << "Test Number of Occurences successful" << std::endl;
