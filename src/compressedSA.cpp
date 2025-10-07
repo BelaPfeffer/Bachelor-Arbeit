@@ -83,7 +83,7 @@ std::vector<int> compressedSA::findPattern(std::string& kmer, unsigned k)
     
     retString[retString.size() - 1] = ']';
 
-    std::cout << "Pattern kommt " << positions.size() << " mal vor in der Text, An Positionen: " << retString << "\n";
+    // std::cout << "Pattern kommt " << positions.size() << " mal vor in der Text, An Positionen: " << retString << "\n";
     
     return positions;
 }

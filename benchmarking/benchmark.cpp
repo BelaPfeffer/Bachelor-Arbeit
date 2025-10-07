@@ -27,6 +27,7 @@ std::string generate_random_sequence(size_t k) {
 // Global variables for file paths and pre-parsed data
 static std::vector<std::string> g_test_files;
 static std::vector<std::string> g_parsed_data;
+std::string kmer {};
 
 // Helper function for memory measurement
 long getPeakMemoryUsageKB() {
@@ -49,27 +50,24 @@ void BM_uncompressedSA(benchmark::State& state) {
     // 1. One-time setup (not measured) - now just get reference to pre-parsed data
     long file_index = state.range(0);
     const std::string& fastaData = g_parsed_data[file_index]; // Reference to pre-parsed data
+
+    SuffixArray SA(fastaData);
+    state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes();
+    state.counters["sasize"] = SA.getSuffixArray().size();
     
     // Measure memory before the measurement loop
-    long mem_before = getPeakMemoryUsageKB();
+
     
     // 2. The actual measurement loop (measures time)
     for (auto _ : state) {
         // This is the operation whose time we want to measure.
-        SuffixArray SA(fastaData);
-        // Prevent the compiler from optimizing away the object creation.
+        std::vector<int> SA_result = SA.search(kmer);
         benchmark::DoNotOptimize(SA);
     }
+   
+
     
-    // 3. Set counters (after the loop!)
-    long mem_after = getPeakMemoryUsageKB();
-    // We report the absolute peak memory after execution.
-    state.counters["Peak RSS (KB)"] = mem_after;
-    // Optional: Also report the difference if that's interesting to you.
-    state.counters["Delta RSS (KB)"] = mem_after - mem_before;
-    
-    SuffixArray SA(fastaData);
-    state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes();
+   
     
 }
 
@@ -81,28 +79,23 @@ void BM_compressedSA(benchmark::State& state) {
     unsigned k = state.range(1);
     const std::string& fastaData = g_parsed_data[file_index]; // Reference to pre-parsed data
     
+    compressedSA csa (fastaData,k);
+    state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
+    state.counters["csasize"] = csa.csasize();
     // Measure memory before the measurement loop
-    long mem_before = getPeakMemoryUsageKB();
     
     // 2. The actual measurement loop (measures time)
     for (auto _ : state) {
         // This is the operation whose time we want to measure.
-        compressedSA csa(fastaData,k);
+        std::vector<int> result = csa.findPattern(kmer, k);
         // Prevent the compiler from optimizing away the object creation.
-        benchmark::DoNotOptimize(&csa);
+        benchmark::DoNotOptimize(result);
     }
     
     // 3. Set counters (after the loop!)
-    long mem_after = getPeakMemoryUsageKB();
     // We report the absolute peak memory after execution.
-    state.counters["Peak RSS (KB)"] = mem_after;
     // Optional: Also report the difference if that's interesting to you.
-    state.counters["Delta RSS (KB)"] = mem_after - mem_before;
     
-    compressedSA csa (fastaData,k);
-    state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
-    state.counters["csasize"] = csa.csasize();
-    std::string kmer = generate_random_sequence(k);
 }
 
 
@@ -121,8 +114,9 @@ void parseAllFiles() {
 // The corrected main() function
 int main(int argc, char** argv) {
     // We need to separate the arguments from Google Benchmark.
-    // All arguments that don't start with '-' are our file paths.
-    for (int i = 1; i < argc; ++i) {
+    unsigned k = std::stoi(argv[argc - 1]);
+    kmer = generate_random_sequence(k); // Default k=8 if not provided
+    for (int i = 1; i < argc - 1; ++i) {
         if (argv[i][0] != '-') {
             g_test_files.push_back(argv[i]);
             // "Remove" the argument so Google Benchmark doesn't see it.
@@ -147,9 +141,8 @@ int main(int argc, char** argv) {
     for (int i = 0; i < g_parsed_data.size(); ++i) {
         // Register the uncompressed suffix array benchmark
         benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)->Arg(i);
-         for (unsigned k = 2; k <= 4; k += 1) {  // k = 15, 20, 25
         benchmark::RegisterBenchmark("BM_compressedSA", &BM_compressedSA)->Args({i, k});
-    }
+   
         
         // You can easily add more benchmarks here that use the same parsed data
         // benchmark::RegisterBenchmark("BM_anotherBenchmark", &BM_anotherBenchmark)->Arg(i);

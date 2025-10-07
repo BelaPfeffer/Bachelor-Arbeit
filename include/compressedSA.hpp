@@ -15,23 +15,23 @@ private:
     std::string text;
 
 public:
-unsigned csasize() const { return CSA.size(); }
+    unsigned csasize() const { return CSA.size(); }
     void printMap(uint64_t k)
-{
-    for (const auto& [key, value] : this -> hashMap) {
+        {
+            for (const auto& [key, value] : this -> hashMap) {
 
-        std::cout << "Key: \"" << key << "\""
-                  << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
-                  << ", cSAindex: " << value.cSAindex
-                  << ", occurences: " << value.occurences
-                  << ", lcp_interval_index: " << value.lcp_interval_index
-                  << ", shift: " << value.shift
-                  << ", refOcc: " << value.refOccurrences
-                  << ", trace: " << value.traceback_key 
-                  << ", processed: " << value.processed
-                  << std::endl;
-    }
-}
+                std::cout << "Key: \"" << key << "\""
+                        << ", Decoded_Key: " << decode_dna5(key,k) // Assuming k=2 for decoding
+                        << ", cSAindex: " << value.cSAindex
+                        << ", occurences: " << value.occurences
+                        << ", lcp_interval_index: " << value.lcp_interval_index
+                        << ", shift: " << value.shift
+                        << ", refOcc: " << value.refOccurrences
+                        << ", trace: " << value.traceback_key 
+                        << ", processed: " << value.processed
+                        << std::endl;
+            }
+        }
     uint64_t encode_dna5(const std::string& kmer);
     std::string decode_dna5(uint64_t encoded, unsigned k);
     std::vector<int> findPattern(std::string& kmer, unsigned k);

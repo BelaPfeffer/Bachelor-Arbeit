@@ -142,7 +142,7 @@ lcp_interval computeSA::get_lcp_interval(unsigned i, unsigned k)
       }   
     }
     
-    std::cout << "minLCPIndex: " << min_index << ", minLCPValue: " << lcp[min_index] << ", left: " << left << ", right: " << right << "\n";
+    // std::cout << "minLCPIndex: " << min_index << ", minLCPValue: " << lcp[min_index] << ", left: " << left << ", right: " << right << "\n";
     
     return lcp_interval(left, right, min_index);
 }
@@ -436,12 +436,12 @@ void computeSA::runCompression(const unsigned k)
 
         prio_index = interval_indeces.back();
         interval_indeces.pop_back();
-        std::cout << "Interval Index: " << prio_index << ", Priority: " << lcpIntervals[prio_index] -> priority << "\n";
+        // std::cout << "Interval Index: " << prio_index << ", Priority: " << lcpIntervals[prio_index] -> priority << "\n";
         curr_interval = lcpIntervals[prio_index].value();
         compression(k, curr_interval);
 
     }
-    printMap(k);
+    // printMap(k);
     // std::cout << "isEmpty: " << interval_indeces.empty() << ", Intervals skipped: " << empty << "\n";
 }
 
