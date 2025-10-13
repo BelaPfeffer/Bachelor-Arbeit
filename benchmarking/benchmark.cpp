@@ -28,9 +28,8 @@ std::string generate_random_sequence(size_t k) {
 
 
 // Global variables for file paths and pre-parsed data
-const std::string text {};
-
-std::string kmer {};
+std::string text;
+std::string kmer;
 
 // Helper function for memory measurement
 long getPeakMemoryUsageKB() {
@@ -52,6 +51,7 @@ long getPeakMemoryUsageKB() {
 void BM_uncompressedSA(benchmark::State& state) {
     // std::cout << "Benchmarking uncompressedSA with kmer: " << kmer << std::endl;
     // 1. One-time setup (not measured) - now just get reference to pre-parsed data
+    std::cout << text.length() << std::endl;
     const std::string& fastaData = text;
     unsigned k = state.range(1); // Reference to pre-parsed data
 
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     }
     unsigned k = std::stoi(argv[argc - 1]);
     std::string filepath = argv[1];
-    const std::string text = parseFasta(filepath);
+    text = parseFasta(filepath);
     kmer = findRandSequence(text,k);
     
     benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)->Args({});
