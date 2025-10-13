@@ -30,6 +30,8 @@ int main(int argc, char* argv[])
     std::vector<int> result = e_csa.findPattern(kmer_to_find, k);
     std::sort(result.begin(), result.end());
     testCorrectness(fastaData, kmer_to_find, result);
+
+    testRandomSequence(fastaData, k);
 }
 
    

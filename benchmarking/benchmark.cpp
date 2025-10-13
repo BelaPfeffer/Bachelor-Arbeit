@@ -4,6 +4,7 @@
 #include "compressedSA.hpp"
 #include "fastaParser.hpp"
 #include "suffix_array.hpp"
+#include "test.hpp"
 #include <random>
 #include <vector>
 #include <string>
@@ -24,9 +25,11 @@ std::string generate_random_sequence(size_t k) {
     return seq;
 }
 
+
+
 // Global variables for file paths and pre-parsed data
-static std::vector<std::string> g_test_files;
-static std::vector<std::string> g_parsed_data;
+const std::string text {};
+
 std::string kmer {};
 
 // Helper function for memory measurement
@@ -47,9 +50,10 @@ long getPeakMemoryUsageKB() {
 
 // The corrected benchmark function
 void BM_uncompressedSA(benchmark::State& state) {
+    // std::cout << "Benchmarking uncompressedSA with kmer: " << kmer << std::endl;
     // 1. One-time setup (not measured) - now just get reference to pre-parsed data
-    long file_index = state.range(0);
-    const std::string& fastaData = g_parsed_data[file_index]; // Reference to pre-parsed data
+    const std::string& fastaData = text;
+    unsigned k = state.range(1); // Reference to pre-parsed data
 
     SuffixArray SA(fastaData);
     state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes();
@@ -74,10 +78,10 @@ void BM_uncompressedSA(benchmark::State& state) {
 
 
 void BM_compressedSA(benchmark::State& state) {
+    // std::cout << "Benchmarking compressedSA with kmer: " << kmer << std::endl;
     // 1. One-time setup (not measured) - now just get reference to pre-parsed data
-    long file_index = state.range(0);
-    unsigned k = state.range(1);
-    const std::string& fastaData = g_parsed_data[file_index]; // Reference to pre-parsed data
+    unsigned k = state.range(0);
+    const std::string& fastaData = text; // Reference to pre-parsed data
     
     compressedSA csa (fastaData,k);
     state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
@@ -100,58 +104,45 @@ void BM_compressedSA(benchmark::State& state) {
 
 
 // Function to pre-parse all FASTA files
-void parseAllFiles() {
-    g_parsed_data.reserve(g_test_files.size());
+// void parseAllFiles() {
+//     g_parsed_data.reserve(g_test_files.size());
     
-    for (const auto& filepath : g_test_files) {
-        std::cout << "Parsing file: " << filepath << std::endl;
-        std::string parsedData = parseFasta(filepath);
-        g_parsed_data.push_back(std::move(parsedData));
-        std::cout << "Parsed " << g_parsed_data.back().length() << " characters" << std::endl;
-    }
-}
+//     for (const auto& filepath : g_test_files) {
+//         std::cout << "Parsing file: " << filepath << std::endl;
+//         std::string parsedData = parseFasta(filepath);
+//         g_parsed_data.push_back(std::move(parsedData));
+//         std::cout << "Parsed " << g_parsed_data.back().length() << " characters" << std::endl;
+//     }
+// }
 
 // The corrected main() function
 int main(int argc, char** argv) {
     // We need to separate the arguments from Google Benchmark.
-    unsigned k = std::stoi(argv[argc - 1]);
-    kmer = generate_random_sequence(k); // Default k=8 if not provided
-    for (int i = 1; i < argc - 1; ++i) {
-        if (argv[i][0] != '-') {
-            g_test_files.push_back(argv[i]);
-            // "Remove" the argument so Google Benchmark doesn't see it.
-            // This is a common trick: overwrite it with the last one and shorten the list.
-            argv[i] = argv[argc - 1];
-            argc--;
-            i--; // Check the new argument at this position again
-        }
-    }
-    
-    if (g_test_files.empty()) {
-        fprintf(stderr, "Error: No input files specified.\n");
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <fasta_file1>  <k>\n", argv[0]);
         return 1;
     }
+    unsigned k = std::stoi(argv[argc - 1]);
+    std::string filepath = argv[1];
+    const std::string text = parseFasta(filepath);
+    kmer = findRandSequence(text,k);
     
-    // Parse all files once before running benchmarks
-    std::cout << "Pre-parsing all FASTA files..." << std::endl;
-    parseAllFiles();
-    std::cout << "Finished parsing all files." << std::endl;
-    
-    // Dynamic registration for each found file
-    for (int i = 0; i < g_parsed_data.size(); ++i) {
-        // Register the uncompressed suffix array benchmark
-        benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)->Arg(i);
-        benchmark::RegisterBenchmark("BM_compressedSA", &BM_compressedSA)->Args({i, k});
+    benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)->Args({});
+    benchmark::RegisterBenchmark("BM_compressedSA", &BM_compressedSA)->Args({k});
    
-        
-        // You can easily add more benchmarks here that use the same parsed data
-        // benchmark::RegisterBenchmark("BM_anotherBenchmark", &BM_anotherBenchmark)->Arg(i);
-    }
     
     // Initialize and run Google Benchmark
     ::benchmark::Initialize(&argc, argv);
     ::benchmark::RunSpecifiedBenchmarks();
     ::benchmark::Shutdown();
+    std::cout << "===============================" << std::endl;
+    std::cout << "BENCHMARKING DONE" << std::endl;
+    std::cout << "===============================" << std::endl;
+    std::cout << "Running correctness test..." << std::endl;
+    testRandomSequence(text, k);
+    std::cout << "===============================" << std::endl;
+    std::cout << "CORRECTNESS TEST DONE" << std::endl;
+    std::cout << "===============================" << std::endl;
     
     return 0;
 }
