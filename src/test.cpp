@@ -83,9 +83,8 @@ void testRandomSequence(const std::string& text, int k) {
     std::cout << "Found random k-mer: " << rand_kmer << "\n";
     std::cout << "Testing correctness for k-mer: " << rand_kmer << std::endl;
 
-    compressedSA e_csa(text, k);
-    std::vector<int> result = e_csa.findPattern(rand_kmer, k);
-    std::sort(result.begin(), result.end());
+    compressedSA csa(text,k);
+    std::vector<int> result = csa.findPattern(rand_kmer, k);
     testCorrectness(text, rand_kmer, result);
     return;
 }

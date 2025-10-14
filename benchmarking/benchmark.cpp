@@ -30,6 +30,7 @@ std::string generate_random_sequence(size_t k) {
 // Global variables for file paths and pre-parsed data
 std::string text;
 std::string kmer;
+std::vector<int> result;
 
 // Helper function for memory measurement
 long getPeakMemoryUsageKB() {
@@ -51,7 +52,6 @@ long getPeakMemoryUsageKB() {
 void BM_uncompressedSA(benchmark::State& state) {
     // std::cout << "Benchmarking uncompressedSA with kmer: " << kmer << std::endl;
     // 1. One-time setup (not measured) - now just get reference to pre-parsed data
-    std::cout << text.length() << std::endl;
     const std::string& fastaData = text;
     unsigned k = state.range(1); // Reference to pre-parsed data
 
@@ -86,14 +86,15 @@ void BM_compressedSA(benchmark::State& state) {
     compressedSA csa (fastaData,k);
     state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
     state.counters["csasize"] = csa.csasize();
+    result = csa.findPattern(kmer, k);
     // Measure memory before the measurement loop
     
     // 2. The actual measurement loop (measures time)
     for (auto _ : state) {
         // This is the operation whose time we want to measure.
-        std::vector<int> result = csa.findPattern(kmer, k);
+        std::vector<int> temp_result = csa.findPattern(kmer, k);
         // Prevent the compiler from optimizing away the object creation.
-        benchmark::DoNotOptimize(result);
+        benchmark::DoNotOptimize(temp_result);
     }
     
     // 3. Set counters (after the loop!)
@@ -139,7 +140,7 @@ int main(int argc, char** argv) {
     std::cout << "BENCHMARKING DONE" << std::endl;
     std::cout << "===============================" << std::endl;
     std::cout << "Running correctness test..." << std::endl;
-    testRandomSequence(text, k);
+    testCorrectness(text, kmer, result);
     std::cout << "===============================" << std::endl;
     std::cout << "CORRECTNESS TEST DONE" << std::endl;
     std::cout << "===============================" << std::endl;
