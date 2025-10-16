@@ -424,7 +424,7 @@ void computeSA::runCompression(const unsigned k)
     
     unsigned empty = 0;
 
-    for (int i = interval_indeces.size() - 1; i >= 0; i--)
+    for (size_t i = interval_indeces.size() - 1; i > 0; i--)
     {
         // std::cout << "interval.size(): " << interval_indeces.size() << "\n";
         if(lcpIntervals[interval_indeces[i]] == std::nullopt) 
@@ -441,8 +441,18 @@ void computeSA::runCompression(const unsigned k)
         compression(k, curr_interval);
 
     }
-    // printMap(k);
-    // std::cout << "isEmpty: " << interval_indeces.empty() << ", Intervals skipped: " << empty << "\n";
+    if(lcpIntervals[interval_indeces[0]] == std::nullopt) 
+    {
+            interval_indeces.pop_back();    
+            empty++; 
+    }
+
+    prio_index = interval_indeces.back();
+    interval_indeces.pop_back();
+        // std::cout << "Interval Index: " << prio_index << ", Priority: " << lcpIntervals[prio_index] -> priority << "\n";
+    curr_interval = lcpIntervals[prio_index].value();
+    compression(k, curr_interval);
+
 }
 
 
