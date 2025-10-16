@@ -30,7 +30,7 @@ std::string generate_random_sequence(size_t k) {
 // Global variables for file paths and pre-parsed data
 std::string text;
 std::string kmer;
-std::vector<int> result;
+std::vector<uint64_t> result;
 
 // Helper function for memory measurement
 long getPeakMemoryUsageKB() {
@@ -92,7 +92,7 @@ void BM_compressedSA(benchmark::State& state) {
     // 2. The actual measurement loop (measures time)
     for (auto _ : state) {
         // This is the operation whose time we want to measure.
-        std::vector<int> temp_result = csa.findPattern(kmer, k);
+        std::vector<uint64_t> temp_result = csa.findPattern(kmer, k);
         // Prevent the compiler from optimizing away the object creation.
         benchmark::DoNotOptimize(temp_result);
     }

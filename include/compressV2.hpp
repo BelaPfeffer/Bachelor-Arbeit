@@ -48,7 +48,7 @@ private:
 
     std::unordered_map<uint64_t, hashValue> hashMap;
 
-    std::vector<int> CSA;
+    std::vector<uint64_t> CSA;
 
     void initComputeSuffix(unsigned k);
 
@@ -69,7 +69,7 @@ public:
 
     void printMap(uint64_t k);
 
-    bool filterSA (const int k, unsigned i);
+    bool filterSA (const unsigned k, unsigned i);
 
     void printSuffixArray() const;
 
@@ -118,5 +118,5 @@ public:
         initComputeSuffix(k);
         util::init_support(rankSupport, &computeSuffix);
         initLCPintervalsAndHashmap(k);
-    }
+    };
 };

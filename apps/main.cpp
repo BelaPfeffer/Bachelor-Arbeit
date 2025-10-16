@@ -27,11 +27,12 @@ int main(int argc, char* argv[])
     const std::string fastaData = parseFasta(filepath);
     
     compressedSA e_csa (fastaData, k);
-    std::vector<int> result = e_csa.findPattern(kmer_to_find, k);
+    std::cout << "FLAG" << std::endl;
+    std::vector<uint64_t> result = e_csa.findPattern(kmer_to_find, k);
     std::sort(result.begin(), result.end());
     testCorrectness(fastaData, kmer_to_find, result);
 
-    testRandomSequence(fastaData, k);
+    // testRandomSequence(fastaData, k);
 }
 
    

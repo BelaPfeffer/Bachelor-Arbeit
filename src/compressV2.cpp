@@ -148,7 +148,7 @@ lcp_interval computeSA::get_lcp_interval(unsigned i, unsigned k)
 }
 
 //wird true wenn wert valid
-bool computeSA::filterSA(const int k, unsigned i)
+bool computeSA::filterSA(const unsigned k, unsigned i)
 {
     unsigned long suffix = suffixArray[i];
     if (suffix + k > text.size()) {
@@ -211,8 +211,8 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
 
     // ab hier nochmal gucken
 
-    int shift = 1;
-    int mask = 0b100100100;
+    uint64_t shift = 1;
+    uint64_t mask = 0b100100100;
     ////HIER IST DER BUG DRIN
     unsigned text_index = pat_pos_index + shift;
 
@@ -418,7 +418,7 @@ void computeSA::runCompression(const unsigned k)
         std::string kmer = text.substr(suffixArray[interval.min_index], k);
         // std::cout << "Index: " << interval_indeces[i] << ", Priority: " << lcpIntervals[interval_indeces[i]] -> priority << "kmer: "<< kmer << "\n";
     }
-
+    
     unsigned prio_index;
     lcp_interval curr_interval;
     

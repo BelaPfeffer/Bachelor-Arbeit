@@ -2,7 +2,7 @@
 #include <vector>
 #include <string> 
 
-void testCorrectness(const std::string& text, const std::string& kmer, const std::vector<int>& output);
+void testCorrectness(const std::string& text, const std::string& kmer, const std::vector<uint64_t>& output);
     // Implement the testCorrectness function here
     // Compare the output with the expected output
     // If they match, print "Test passed"

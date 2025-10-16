@@ -39,17 +39,17 @@ std::string compressedSA::decode_dna5(uint64_t encoded, unsigned k)
     return decoded;
 }
 
-std::vector<int> compressedSA::findPattern(std::string& kmer, unsigned k)
+std::vector<uint64_t> compressedSA::findPattern(std::string& kmer, unsigned k)
 {
     if(kmer.size() != k) throw std::invalid_argument("Pattern size must be equal to kmer size");
 
     std::string retString = "[";
 
-    std::vector<int> positions;
+    std::vector<uint64_t> positions;
     bool isReference;
     bool isinCSA;
 
-    int encoded_kmer = encode_dna5(kmer);
+    uint64_t encoded_kmer = encode_dna5(kmer);
     hashValue curr_value = hashMap[encoded_kmer];
 
     isReference = (curr_value.refOccurrences != 0);
@@ -97,7 +97,7 @@ size_t compressedSA::memoryUsageBytes() const {
     totalMemory += hashMap.size() * sizeof(std::pair<uint64_t, hashValue>);
     
     // Speicher für CSA vector
-    totalMemory += CSA.capacity() * sizeof(int);
+    totalMemory += CSA.capacity() * sizeof(uint64_t);
     
     // Speicher für text string
     totalMemory += text.capacity() * sizeof(char);
@@ -111,7 +111,7 @@ compressedSA compressedSA::compute (const std::string& fastaData, const unsigned
     // csa -> printIntervals(k);
     csa -> runCompression(k);
     // csa -> printMap(k);
-    // csa -> printComputeSA();
+    // csa -> printComputeSA(); 
     compressedSA e_csa = csa -> exportSA();
     // e_csa.printMap(k);
 

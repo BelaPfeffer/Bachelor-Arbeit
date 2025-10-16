@@ -38,7 +38,7 @@ std::string findRandSequence(const std::string& text, std::size_t length) {
     return text.substr(start, length);
 }
 
-void testCorrectness(const std::string& text, const std::string& kmer, const std::vector<int>& output_pos)
+void testCorrectness(const std::string& text, const std::string& kmer, const std::vector<uint64_t>& output_pos)
 {
     csa_bitcompressed<> csa;
     construct_im(csa, text, 1);
@@ -84,7 +84,7 @@ void testRandomSequence(const std::string& text, int k) {
     std::cout << "Testing correctness for k-mer: " << rand_kmer << std::endl;
 
     compressedSA csa(text,k);
-    std::vector<int> result = csa.findPattern(rand_kmer, k);
+    std::vector<uint64_t> result = csa.findPattern(rand_kmer, k);
     testCorrectness(text, rand_kmer, result);
     return;
 }
