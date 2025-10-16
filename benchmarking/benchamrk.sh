@@ -1,0 +1,1 @@
+parallel --bar --results /storage/mi/belap01/Bachelor-Arbeit/logs ./benchmark_script {} 21 ::: /storage/mi/belap01/Bachelor-Arbeit/input_files/*.freqskmers.fa.ust.fa.gz
