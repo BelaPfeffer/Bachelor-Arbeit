@@ -441,6 +441,7 @@ void computeSA::runCompression(const unsigned k)
         compression(k, curr_interval);
 
     }
+
     if(lcpIntervals[interval_indeces[0]] == std::nullopt) 
     {
             interval_indeces.pop_back();    

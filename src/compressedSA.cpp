@@ -94,14 +94,19 @@ size_t compressedSA::memoryUsageBytes() const {
     // Basis-Objektgröße (die Klasse selbst)
     totalMemory += sizeof(*this);
     
-    totalMemory += hashMap.size() * sizeof(std::pair<uint64_t, hashValue>);
-    
+    size_t hashmapMEM = hashMap.size() * sizeof(std::pair<uint64_t, hashValue>);
+    totalMemory += hashmapMEM;
+
     // Speicher für CSA vector
-    totalMemory += CSA.capacity() * sizeof(uint64_t);
-    
+    size_t csaMEM = CSA.capacity() * sizeof(uint64_t);
+    totalMemory += csaMEM;
     // Speicher für text string
-    totalMemory += text.capacity() * sizeof(char);
+    size_t textMEM = text.capacity() * sizeof(char);
+    totalMemory += textMEM;
     
+    std::cout << "Hashmap MEM (approx): " << hashmapMEM << " bytes\n";
+    std::cout << "CSA size (approx): " << csaMEM << " bytes\n";
+    std::cout << "Text size (approx): " << textMEM << " bytes\n";
     return totalMemory;
 }
 

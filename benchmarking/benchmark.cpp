@@ -1,4 +1,3 @@
-
 #include <benchmark/benchmark.h>
 #include <sys/resource.h>
 #include "compressedSA.hpp"
@@ -8,142 +7,103 @@
 #include <random>
 #include <vector>
 #include <string>
+#include <iostream>
 
-std::string generate_random_sequence(size_t k) {
-    static const char nucleotides[] = {'A', 'C', 'G', 'T'};
-    
-    // Use a random device and Mersenne Twister engine
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(0, 3);
-
-    std::string seq;
-    seq.reserve(k);
-    for (size_t i = 0; i < k; ++i) {
-        seq.push_back(nucleotides[dist(gen)]);
-    }
-    return seq;
-}
-
-
-
-// Global variables for file paths and pre-parsed data
+// Global inputs
 std::string text;
 std::string kmer;
 std::vector<uint64_t> result;
 
-// Helper function for memory measurement
+// (Optional) peak RSS helper (currently unused)
 long getPeakMemoryUsageKB() {
     struct rusage usage;
-    // RUSAGE_SELF queries memory for the current process
     if (getrusage(RUSAGE_SELF, &usage) == 0) {
-        // On macOS ru_maxrss is in bytes, on Linux in kilobytes.
-        // We need to consider this for portability.
 #if defined(__APPLE__) && defined(__MACH__)
-        return usage.ru_maxrss / 1024; // Convert from bytes to KB
+        return usage.ru_maxrss / 1024; // bytes -> KB
 #else
-        return usage.ru_maxrss; // Already in KB
+        return usage.ru_maxrss;        // already KB on Linux
 #endif
     }
     return 0;
 }
 
-// The corrected benchmark function
-void BM_uncompressedSA(benchmark::State& state) {
-    // std::cout << "Benchmarking uncompressedSA with kmer: " << kmer << std::endl;
-    // 1. One-time setup (not measured) - now just get reference to pre-parsed data
+static void BM_uncompressedSA(benchmark::State& state) {
     const std::string& fastaData = text;
-    unsigned k = state.range(1); // Reference to pre-parsed data
 
+    // Build once per benchmark invocation (not timed)
     SuffixArray SA(fastaData);
+
+    // Report memory/size counters
     state.counters["Exact Memory (Byte)"] = SA.memoryUsageBytes();
     state.counters["sasize"] = SA.getSuffixArray().size();
-    
-    // Measure memory before the measurement loop
 
-    
-    // 2. The actual measurement loop (measures time)
     for (auto _ : state) {
-        // This is the operation whose time we want to measure.
-        std::vector<int> SA_result = SA.search(kmer);
-        benchmark::DoNotOptimize(SA);
+        auto SA_result = SA.search(kmer);
+        benchmark::DoNotOptimize(SA_result);
+        benchmark::ClobberMemory();
     }
-   
-
-    
-   
-    
 }
 
+static void BM_compressedSA(benchmark::State& state) {
+    unsigned k = static_cast<unsigned>(state.range(0));
+    const std::string& fastaData = text;
 
+    // Build once per benchmark invocation (not timed)
+    compressedSA csa(fastaData, k);
 
-void BM_compressedSA(benchmark::State& state) {
-    // std::cout << "Benchmarking compressedSA with kmer: " << kmer << std::endl;
-    // 1. One-time setup (not measured) - now just get reference to pre-parsed data
-    unsigned k = state.range(0);
-    const std::string& fastaData = text; // Reference to pre-parsed data
-    
-    compressedSA csa (fastaData,k);
+    // Report memory/size counters
     state.counters["Exact Memory (Byte)"] = csa.memoryUsageBytes();
     state.counters["csasize"] = csa.csasize();
+
+    // Keep a reference result for correctness check after benchmarks
     result = csa.findPattern(kmer, k);
-    // Measure memory before the measurement loop
-    
-    // 2. The actual measurement loop (measures time)
+
     for (auto _ : state) {
-        // This is the operation whose time we want to measure.
-        std::vector<uint64_t> temp_result = csa.findPattern(kmer, k);
-        // Prevent the compiler from optimizing away the object creation.
-        benchmark::DoNotOptimize(temp_result);
+        auto tmp = csa.findPattern(kmer, k);
+        benchmark::DoNotOptimize(tmp);
+        benchmark::ClobberMemory();
     }
-    
-    // 3. Set counters (after the loop!)
-    // We report the absolute peak memory after execution.
-    // Optional: Also report the difference if that's interesting to you.
-    
 }
 
-
-// Function to pre-parse all FASTA files
-// void parseAllFiles() {
-//     g_parsed_data.reserve(g_test_files.size());
-    
-//     for (const auto& filepath : g_test_files) {
-//         std::cout << "Parsing file: " << filepath << std::endl;
-//         std::string parsedData = parseFasta(filepath);
-//         g_parsed_data.push_back(std::move(parsedData));
-//         std::cout << "Parsed " << g_parsed_data.back().length() << " characters" << std::endl;
-//     }
-// }
-
-// The corrected main() function
 int main(int argc, char** argv) {
-    // We need to separate the arguments from Google Benchmark.
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s <fasta_file1>  <k>\n", argv[0]);
+        std::fprintf(stderr, "Usage: %s <fasta_file> <k>\n", argv[0]);
         return 1;
     }
-    unsigned k = std::stoi(argv[argc - 1]);
-    std::string filepath = argv[1];
+
+    const unsigned k = static_cast<unsigned>(std::stoi(argv[2]));
+    const std::string filepath = argv[1];
+
     text = parseFasta(filepath);
-    kmer = findRandSequence(text,k);
-    
-    benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)->Args({});
-    benchmark::RegisterBenchmark("BM_compressedSA", &BM_compressedSA)->Args({k});
-   
-    
-    // Initialize and run Google Benchmark
+
+    // Reproducible query selection: choose one and print it
+    // (ensure findRandSequence uses a fixed or logged RNG seed)
+    kmer = findRandSequence(text, k);
+    std::cout << "Dataset: " << filepath << " (len=" << text.size()
+              << "), k=" << k << ", query=" << kmer << "\n";
+
+    benchmark::RegisterBenchmark("BM_uncompressedSA", &BM_uncompressedSA)
+        ->UseRealTime()
+        ->Unit(benchmark::kMicrosecond)
+        ->Repetitions(5)
+        ->ReportAggregatesOnly(true)
+        ->DisplayAggregatesOnly(true);
+
+    benchmark::RegisterBenchmark("BM_compressedSA", &BM_compressedSA)
+        ->Args({static_cast<int64_t>(k)})
+        ->UseRealTime()
+        ->Unit(benchmark::kMicrosecond)
+        ->Repetitions(5)
+        ->ReportAggregatesOnly(true)
+        ->DisplayAggregatesOnly(true);
+
     ::benchmark::Initialize(&argc, argv);
     ::benchmark::RunSpecifiedBenchmarks();
     ::benchmark::Shutdown();
-    std::cout << "===============================" << std::endl;
-    std::cout << "BENCHMARKING DONE" << std::endl;
-    std::cout << "===============================" << std::endl;
-    std::cout << "Running correctness test..." << std::endl;
+
+    std::cout << "===============================\nBENCHMARKING DONE\n===============================\n";
+    std::cout << "Running correctness test...\n";
     testCorrectness(text, kmer, result);
-    std::cout << "===============================" << std::endl;
-    std::cout << "CORRECTNESS TEST DONE" << std::endl;
-    std::cout << "===============================" << std::endl;
-    
+    std::cout << "===============================\nCORRECTNESS TEST DONE\n===============================\n";
     return 0;
 }

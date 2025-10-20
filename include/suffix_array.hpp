@@ -3,38 +3,44 @@
 
 #include <string>
 #include <vector>
+#include <cstdint>          // for uint64_t
 #include <unordered_map>
 #include <sdsl/suffix_arrays.hpp>
 
-
 class SuffixArray {
 public:
-    // Constructor: Takes the input string
-    SuffixArray(const std::string& input);
+    // Constructors / destructor
+    explicit SuffixArray(const std::string& input);
     SuffixArray() = default;
     ~SuffixArray() = default;
 
-    // Public functions to get results or print them
-    const std::vector<int>& getSuffixArray() const;
-    const std::vector<int>& getLCPArray() const;
-    const std::string& getText() const ;
+    // Introspection / stats
+    virtual size_t memoryUsageBytes() const;
+
+    // Accessors
+    const std::vector<uint64_t>& getSuffixArray() const;
+    const std::vector<int>&      getLCPArray() const;
+    const std::string&           getText() const;
+
+    // Debug printing
     void printSuffixArray() const;
     void printLCPArray() const;
-    virtual size_t memoryUsageBytes() const;
-    
-    // Public search function
-    std::vector<int> search(const std::string& pattern) const;
-    std::pair<std::vector<int>,std::vector<int>> search_val_and_pos(const std::string& pattern) const;
-protected:
-    // Member variables
-    std::string text;
-    std::vector<int> suffixArray;
-    std::vector<int> lcpArray;
 
-    // Private helper functions used by the constructor
-    void buildSuffixArray();           // The simple O(n^2 log n) version
-    void buildSuffixArrayOptimized();  // The O(n log n) version
-    void buildLCPArray();              // Kasai's algorithm
+    // Search interfaces
+    std::vector<uint64_t> search(const std::string& pattern) const;
+    std::pair<std::vector<uint64_t>, std::vector<uint64_t>>
+    search_val_and_pos(const std::string& pattern) const;
+
+protected:
+    // Members
+    std::string              text;
+    std::vector<uint64_t>    suffixArray; // positions in text
+    std::vector<int>         lcpArray;    // LCP between SA[i] and SA[i+1]
+
+    // Builders (used by ctor)
+    void buildSuffixArray();           // naive O(n log^2 n) version
+    void buildSuffixArrayOptimized();  // O(n log n) prefix-doubling
+    void buildLCPArray();              // Kasai's algorithm, O(n)
 };
 
-#endif // SUFFIXARRAY_H{
+#endif // SUFFIXARRAY_H

@@ -32,7 +32,8 @@ std::string findRandSequence(const std::string& text, std::size_t length) {
 
     if (starts.empty()) return "";
 
-    static thread_local std::mt19937 rng{std::random_device{}()};
+    static uint64_t seed = 123456789; // choose a fixed value for reproducibility
+    static std::mt19937 rng(seed);
     std::uniform_int_distribution<std::size_t> dist(0, starts.size() - 1);
     std::size_t start = starts[dist(rng)];
     return text.substr(start, length);
@@ -44,13 +45,6 @@ void testCorrectness(const std::string& text, const std::string& kmer, const std
     construct_im(csa, text, 1);
     int_vector<64> output = locate(csa, kmer);
     std::sort(output.begin(), output.end());
-    
-    // std::string correct_pos = "[";
-    // for (unsigned long i = 0; i < output.size(); i++) {
-    //     correct_pos += std::to_string(output[i]) + ",";
-    // }
-    // correct_pos[correct_pos.size() - 1] = ']';
-    // std::cout << "Correct Positions: " << correct_pos << "\n";
 
     std::cout << "Start Test for kmer: " << kmer << std::endl;
     std::cout << "\n";
@@ -64,7 +58,9 @@ void testCorrectness(const std::string& text, const std::string& kmer, const std
 
     std::cout << "Test Positions... " << std::endl;
     std::cout << "\n";
-    
+    for (unsigned long i = 0; i < output.size(); i++) {
+        assert(output[i] == output_pos[i]);
+    }
     std::cout << "\n";
     std::cout << "Test Positions successful" << std::endl;
      
