@@ -1,17 +1,17 @@
 #pragma once
-
+#include <cstdint>
 
 struct hashValue
 {   //=================================================================
     //KMER steht im komprimierten Suffix Array
     int cSAindex; // Index im komprimierten Suffix Array
-    unsigned long occurences; // Anzahl der Vorkommen
-    unsigned long lcp_interval_index; // Index des LCP Intervalls
+    uint32_t occurences; // Anzahl der Vorkommen
+    uint32_t lcp_interval_index; // Index des LCP Intervalls
     //=================================================================
     //REFERENZ auf anderes Pattern, von dem dieses abhängt
     int shift; // Verschiebung im Text (wenn -1 dann gibt keine Verschriebung d.h. nicht von anderem Pattern abhängig
-    unsigned long refOccurrences;
-    unsigned traceback_key; // Referenz auf das andere Pattern (kann nullptr sein, wenn es kein anderes Pattern gibt)
+    uint32_t refOccurrences;
+    uint32_t traceback_key; // Referenz auf das andere Pattern (kann nullptr sein, wenn es kein anderes Pattern gibt)
     bool processed;
                // sondern direkt in SA)
 
