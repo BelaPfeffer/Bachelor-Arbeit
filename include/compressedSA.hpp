@@ -16,6 +16,13 @@ private:
 
 public:
     unsigned csasize() const { return CSA.size(); }
+
+    void save(const std::string& filename) const;
+       
+    
+    // NEW: Load from disk
+    static compressedSA load(const std::string& filename);
+
     void printMap(uint64_t k)
         {
             for (const auto& [key, value] : this -> hashMap) {

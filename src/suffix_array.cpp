@@ -230,3 +230,70 @@ SuffixArray::search_val_and_pos(const std::string& pattern) const {
     }
     return {values, positions};
 }
+
+void SuffixArray::save(const std::string& filename) const {
+    std::ofstream out(filename, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("Cannot open file for writing: " + filename);
+    }
+    
+    // 1. Save text
+    size_t text_size = text.size();
+    out.write(reinterpret_cast<const char*>(&text_size), sizeof(text_size));
+    out.write(text.data(), text_size);
+    
+    // 2. Save suffix array
+    size_t sa_size = suffixArray.size();
+    out.write(reinterpret_cast<const char*>(&sa_size), sizeof(sa_size));
+    out.write(reinterpret_cast<const char*>(suffixArray.data()), 
+              sa_size * sizeof(uint64_t));
+    
+    // 3. Save LCP array
+    size_t lcp_size = lcpArray.size();
+    out.write(reinterpret_cast<const char*>(&lcp_size), sizeof(lcp_size));
+    out.write(reinterpret_cast<const char*>(lcpArray.data()), 
+              lcp_size * sizeof(int));
+    
+    out.close();
+    
+    if (!out.good()) {
+        throw std::runtime_error("Error writing to file: " + filename);
+    }
+}
+
+SuffixArray SuffixArray::load(const std::string& filename) {
+    std::ifstream in(filename, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("Cannot open file for reading: " + filename);
+    }
+    
+    SuffixArray result;
+    
+    // 1. Load text
+    size_t text_size;
+    in.read(reinterpret_cast<char*>(&text_size), sizeof(text_size));
+    result.text.resize(text_size);
+    in.read(&result.text[0], text_size);
+    
+    // 2. Load suffix array
+    size_t sa_size;
+    in.read(reinterpret_cast<char*>(&sa_size), sizeof(sa_size));
+    result.suffixArray.resize(sa_size);
+    in.read(reinterpret_cast<char*>(result.suffixArray.data()), 
+            sa_size * sizeof(uint64_t));
+    
+    // 3. Load LCP array
+    size_t lcp_size;
+    in.read(reinterpret_cast<char*>(&lcp_size), sizeof(lcp_size));
+    result.lcpArray.resize(lcp_size);
+    in.read(reinterpret_cast<char*>(result.lcpArray.data()), 
+            lcp_size * sizeof(int));
+    
+    in.close();
+    
+    if (!in.good()) {
+        throw std::runtime_error("Error reading from file: " + filename);
+    }
+    
+    return result;
+}

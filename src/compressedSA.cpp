@@ -122,3 +122,79 @@ compressedSA compressedSA::compute (const std::string& fastaData, const unsigned
 
     return e_csa;
 }
+
+  void compressedSA::save(const std::string& filename) const {
+        std::ofstream out(filename, std::ios::binary);
+        if (!out) {
+            throw std::runtime_error("Cannot open file for writing: " + filename);
+        }
+        
+        // 1. Save text
+        size_t text_size = text.size();
+        out.write(reinterpret_cast<const char*>(&text_size), sizeof(text_size));
+        out.write(text.data(), text_size);
+        
+        // 2. Save CSA vector
+        size_t csa_size = CSA.size();
+        out.write(reinterpret_cast<const char*>(&csa_size), sizeof(csa_size));
+        out.write(reinterpret_cast<const char*>(CSA.data()), csa_size * sizeof(uint64_t));
+        
+        // 3. Save hashMap
+        size_t map_size = hashMap.size();
+        out.write(reinterpret_cast<const char*>(&map_size), sizeof(map_size));
+        
+        for (const auto& [key, value] : hashMap) {
+            // Write key
+            out.write(reinterpret_cast<const char*>(&key), sizeof(key));
+            
+            // Write hashValue (assuming it's POD - adjust if it has pointers/complex members)
+            out.write(reinterpret_cast<const char*>(&value), sizeof(hashValue));
+        }
+        
+        out.close();
+        std::cout << "Saved compressedSA to " << filename << " (" 
+                  << memoryUsageBytes() << " bytes)\n";
+    }
+    
+    // NEW: Load from disk
+    compressedSA compressedSA::load(const std::string& filename) {
+        std::ifstream in(filename, std::ios::binary);
+        if (!in) {
+            throw std::runtime_error("Cannot open file for reading: " + filename);
+        }
+        
+        std::string text_loaded;
+        std::vector<uint64_t> CSA_loaded;
+        std::unordered_map<uint64_t, hashValue> hashMap_loaded;
+        
+        // 1. Load text
+        size_t text_size;
+        in.read(reinterpret_cast<char*>(&text_size), sizeof(text_size));
+        text_loaded.resize(text_size);
+        in.read(&text_loaded[0], text_size);
+        
+        // 2. Load CSA vector
+        size_t csa_size;
+        in.read(reinterpret_cast<char*>(&csa_size), sizeof(csa_size));
+        CSA_loaded.resize(csa_size);
+        in.read(reinterpret_cast<char*>(CSA_loaded.data()), csa_size * sizeof(uint64_t));
+        
+        // 3. Load hashMap
+        size_t map_size;
+        in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        
+        for (size_t i = 0; i < map_size; ++i) {
+            uint64_t key;
+            hashValue value;
+            
+            in.read(reinterpret_cast<char*>(&key), sizeof(key));
+            in.read(reinterpret_cast<char*>(&value), sizeof(hashValue));
+            
+            hashMap_loaded[key] = value;
+        }
+        
+        in.close();
+        
+        std::cout << "Loaded compressedSA from " << filename << "\n";
+        return compressedSA(hashMap_loaded, CSA_loaded, text_loaded);
+    }

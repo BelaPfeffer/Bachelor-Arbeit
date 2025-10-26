@@ -505,3 +505,5 @@ compressedSA computeSA::exportSA () const
    compressedSA e_csa (this -> hashMap, this -> CSA, this -> text);
     return e_csa;
 }
+
+

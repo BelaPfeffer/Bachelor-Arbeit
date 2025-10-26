@@ -30,6 +30,8 @@ public:
     std::vector<uint64_t> search(const std::string& pattern) const;
     std::pair<std::vector<uint64_t>, std::vector<uint64_t>>
     search_val_and_pos(const std::string& pattern) const;
+    void save(const std::string& filename) const;
+    static SuffixArray load(const std::string& filename);
 
 protected:
     // Members
