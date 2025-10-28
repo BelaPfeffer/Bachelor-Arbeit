@@ -1,6 +1,6 @@
-#include <benchmark/benchmark.h>
 #include "compressedSA.hpp"
 #include "suffix_array.hpp"
+#include "test.hpp"      // for findRandQueries(...)
 #include <random>
 #include <vector>
 #include <fstream>
@@ -9,281 +9,228 @@
 #include <cmath>
 #include <iomanip>
 #include <memory>
+#include <chrono>
+#include <iostream>
 
-// Global state for loaded indices - USE POINTERS!
+// -----------------------------
+// Global state
+// -----------------------------
 struct GlobalState {
-    std::unique_ptr<SuffixArray> SA;        // Changed to pointer
-    std::unique_ptr<compressedSA> CSA;      // Changed to pointer
+    std::unique_ptr<SuffixArray> SA;
+    std::unique_ptr<compressedSA> CSA;
     std::vector<std::string> queries;
-    unsigned k;
+    unsigned k = 0;
+    unsigned reps = 3;
     std::string dataset_name;
-    bool loaded = false;
 } g_state;
 
-// Sample random k-mers from text
-std::vector<std::string> sampleQueries(const std::string& text, unsigned k, 
-                                       size_t num_queries, uint64_t seed) {
-    if (text.size() < k) {
-        throw std::runtime_error("Text too short for k-mer length");
-    }
-    
-    std::mt19937_64 rng(seed);
-    std::uniform_int_distribution<size_t> dist(0, text.size() - k);
-    
-    std::vector<std::string> queries;
-    queries.reserve(num_queries);
-    
-    for (size_t i = 0; i < num_queries; ++i) {
-        size_t pos = dist(rng);
-        queries.push_back(text.substr(pos, k));
-    }
-    
-    return queries;
+// -----------------------------
+// Small helpers
+// -----------------------------
+static inline void printSeparator() {
+    std::cout << "======================================\n";
 }
 
-// Benchmark uncompressed SA
-static void BM_SA_Lookup(benchmark::State& state) {
-    size_t query_idx = state.range(0);
-    const std::string& query = g_state.queries[query_idx];
-    
-    for (auto _ : state) {
-        auto result = g_state.SA->search(query);  // Use -> instead of .
-        benchmark::DoNotOptimize(result);
-        benchmark::ClobberMemory();
-    }
-}
-
-// Benchmark compressed SA
-static void BM_CSA_Lookup(benchmark::State& state) {
-    size_t query_idx = state.range(0);
-    std::string query = g_state.queries[query_idx];
-    
-    for (auto _ : state) {
-        auto result = g_state.CSA->findPattern(query, g_state.k);  // Use -> instead of .
-        benchmark::DoNotOptimize(result);
-        benchmark::ClobberMemory();
-    }
-}
-
-// Statistics helpers
-double mean(const std::vector<double>& v) {
+static double mean(const std::vector<double>& v) {
     if (v.empty()) return 0.0;
     return std::accumulate(v.begin(), v.end(), 0.0) / v.size();
 }
 
-double stddev(const std::vector<double>& v) {
+static double stddev(const std::vector<double>& v) {
     if (v.empty()) return 0.0;
     double m = mean(v);
-    double sq_sum = 0.0;
-    for (double x : v) sq_sum += (x - m) * (x - m);
-    return std::sqrt(sq_sum / v.size());
+    double sq = 0.0;
+    for (double x : v) {
+        double d = x - m;
+        sq += d * d;
+    }
+    return std::sqrt(sq / v.size());
 }
 
-double percentile(std::vector<double> v, double p) {
+static double percentile(std::vector<double> v, double p) {
     if (v.empty()) return 0.0;
     std::sort(v.begin(), v.end());
     size_t idx = static_cast<size_t>(p * v.size());
-    return v[std::min(idx, v.size() - 1)];
-}
-
-void printSeparator() {
-    std::cout << "======================================\n";
+    if (idx >= v.size()) idx = v.size() - 1;
+    return v[idx];
 }
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::fprintf(stderr, "Usage: %s <dataset_name> <k> [num_queries=100]\n", argv[0]);
-        std::fprintf(stderr, "Example: %s kestrel 6 100\n", argv[0]);
+    // Usage: prog <dataset_name> <k> <reps> [num_queries=100] [--shuffle]
+    bool shuffle_q = false;
+
+    // Strip shuffle flag if present
+    {
+        int w = 1;
+        for (int r = 1; r < argc; ++r) {
+            if (std::string(argv[r]) == "--shuffle") {
+                shuffle_q = true;
+                continue;
+            }
+            argv[w++] = argv[r];
+        }
+        argc = w;
+    }
+
+    if (argc < 4) {
+        std::fprintf(stderr, "Usage: %s <dataset_name> <k> <reps> [num_queries=100] [--shuffle]\n", argv[0]);
         return 1;
     }
-    
+
     g_state.dataset_name = argv[1];
-    g_state.k = std::stoi(argv[2]);
-    size_t num_queries = (argc >= 4) ? std::stoi(argv[3]) : 100;
-    
+    g_state.k = static_cast<unsigned>(std::stoul(argv[2]));
+    g_state.reps = static_cast<unsigned>(std::stoul(argv[3]));
+    size_t num_queries = (argc >= 5) ? static_cast<size_t>(std::stoul(argv[4])) : 100;
+
     printSeparator();
     std::cout << "QUERY BENCHMARK SETUP\n";
     printSeparator();
-    std::cout << "Dataset:       " << g_state.dataset_name << "\n";
-    std::cout << "k-mer length:  " << g_state.k << "\n";
-    std::cout << "Num queries:   " << num_queries << "\n";
-    std::cout << "Random seed:   123456789\n";
-    printSeparator();
-    std::cout << "\n";
-    
-    // Construct filenames
-    std::string sa_file = "indices/" + g_state.dataset_name + "_k" + 
-                          std::to_string(g_state.k) + "_sa.bin";
-    std::string csa_file = "indices/" + g_state.dataset_name + "_k" + 
-                           std::to_string(g_state.k) + "_csa.bin";
-    
-    // Load indices using make_unique
-    std::cout << "Loading uncompressed SA from " << sa_file << "...\n";
+    std::cout << "Dataset:      " << g_state.dataset_name << "\n";
+    std::cout << "k-mer length: " << g_state.k << "\n";
+    std::cout << "Reps/query:   " << g_state.reps << "\n";
+    std::cout << "Num queries:  " << num_queries << "\n";
+    std::cout << "Random seed:  123456789\n";
+    std::cout << "Shuffle:      " << (shuffle_q ? "yes" : "no") << "\n\n";
+
+    // Filenames
+    std::string sa_file  = "indices/" + g_state.dataset_name + "_k" + std::to_string(g_state.k) + "_sa.bin";
+    std::string csa_file = "indices/" + g_state.dataset_name + "_k" + std::to_string(g_state.k) + "_csa.bin";
+
+    // Load SA
+    std::cout << "Loading SA from " << sa_file << "...\n";
     try {
         g_state.SA = std::make_unique<SuffixArray>(SuffixArray::load(sa_file));
         std::cout << "  Entries: " << g_state.SA->getSuffixArray().size() << "\n";
         std::cout << "  Memory:  " << g_state.SA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR: Could not load SA: " << e.what() << "\n";
-        std::cerr << "Did you run './construct_indices' first?\n";
+    } catch (...) {
+        std::cerr << "ERROR loading SA\n";
         return 1;
     }
-    
-    std::cout << "\nLoading compressed SA from " << csa_file << "...\n";
+
+    // Load CSA
+    std::cout << "Loading CSA from " << csa_file << "...\n";
     try {
         g_state.CSA = std::make_unique<compressedSA>(compressedSA::load(csa_file));
         std::cout << "  Entries: " << g_state.CSA->csasize() << "\n";
         std::cout << "  Memory:  " << g_state.CSA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR: Could not load CSA: " << e.what() << "\n";
-        std::cerr << "Did you run './construct_indices' first?\n";
+    } catch (...) {
+        std::cerr << "ERROR loading CSA\n";
         return 1;
     }
-    
-    // Sample queries
+
+    // Generate queries
     std::cout << "\nSampling " << num_queries << " random k-mers...\n";
-    g_state.queries = sampleQueries(g_state.SA->getText(), g_state.k, num_queries, 123456789);
-    std::cout << "  First query: " << g_state.queries[0] << "\n";
-    std::cout << "  Last query:  " << g_state.queries[num_queries - 1] << "\n";
-    
-    g_state.loaded = true;
-    
-    std::cout << "\n";
-    printSeparator();
-    std::cout << "RUNNING GOOGLE BENCHMARK\n";
-    printSeparator();
-    std::cout << "\n";
-    
-    // Register benchmarks for each query
-    for (size_t i = 0; i < num_queries; ++i) {
-        benchmark::RegisterBenchmark("SA", BM_SA_Lookup)
-            ->Args({static_cast<int64_t>(i)})
-            ->UseRealTime()
-            ->Unit(benchmark::kMicrosecond)
-            ->Repetitions(5)
-            ->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
-                return *std::min_element(v.begin(), v.end());
-            })
-            ->ComputeStatistics("max", [](const std::vector<double>& v) -> double {
-                return *std::max_element(v.begin(), v.end());
-            });
-        
-        benchmark::RegisterBenchmark("CSA", BM_CSA_Lookup)
-            ->Args({static_cast<int64_t>(i)})
-            ->UseRealTime()
-            ->Unit(benchmark::kMicrosecond)
-            ->Repetitions(5)
-            ->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
-                return *std::min_element(v.begin(), v.end());
-            })
-            ->ComputeStatistics("max", [](const std::vector<double>& v) -> double {
-                return *std::max_element(v.begin(), v.end());
-            });
+    g_state.queries = findRandQueries(g_state.SA->getText(), g_state.k, num_queries);
+
+    if (shuffle_q) {
+        std::mt19937_64 rng(123456789);
+        std::shuffle(g_state.queries.begin(), g_state.queries.end(), rng);
     }
-    
-    // Run Google Benchmark
-    ::benchmark::Initialize(&argc, argv);
-    ::benchmark::RunSpecifiedBenchmarks();
-    ::benchmark::Shutdown();
-    
-    std::cout << "\n";
+
+    using clock_t = std::chrono::steady_clock;
+
+    std::vector<double> sa_times;   sa_times.reserve(num_queries);
+    std::vector<double> csa_times;  csa_times.reserve(num_queries);
+    std::vector<size_t> sa_occurs;  sa_occurs.reserve(num_queries);
+    std::vector<size_t> csa_occurs; csa_occurs.reserve(num_queries);
+
     printSeparator();
-    std::cout << "POST-PROCESSING STATISTICS\n";
+    std::cout << "MEASURING PER-QUERY TIMES (μs, averaged)\n";
     printSeparator();
-    std::cout << "\n";
-    
-    // Collect detailed measurements for statistics
-    std::vector<double> sa_times, csa_times;
-    std::vector<size_t> occurrences;
-    
-    std::cout << "Running single-pass measurement for statistics...\n";
+
+    // Warmup (pass a mutable copy to CSA in case it mutates the input)
+    for (auto& q : g_state.queries) {
+        (void)g_state.SA->search(q);
+        std::string qm = q;
+        (void)g_state.CSA->findPattern(qm, g_state.k);
+    }
+
+    const int R = static_cast<int>(g_state.reps);
+
     for (size_t i = 0; i < num_queries; ++i) {
-        // Measure SA
-        auto start = std::chrono::high_resolution_clock::now();
-        auto sa_result = g_state.SA->search(g_state.queries[i]);
-        auto end = std::chrono::high_resolution_clock::now();
-        double sa_time = std::chrono::duration<double, std::micro>(end - start).count();
-        sa_times.push_back(sa_time);
-        
-        // Measure CSA
-        std::string query_copy = g_state.queries[i];
-        start = std::chrono::high_resolution_clock::now();
-        auto csa_result = g_state.CSA->findPattern(query_copy, g_state.k);
-        end = std::chrono::high_resolution_clock::now();
-        double csa_time = std::chrono::duration<double, std::micro>(end - start).count();
-        csa_times.push_back(csa_time);
-        
-        occurrences.push_back(sa_result.size());
-        
-        // Verify correctness
-        if (sa_result.size() != csa_result.size()) {
-            std::cerr << "WARNING: Query " << i << " (" << g_state.queries[i] 
-                      << ") has mismatched results!\n";
-            std::cerr << "  SA occurrences:  " << sa_result.size() << "\n";
-            std::cerr << "  CSA occurrences: " << csa_result.size() << "\n";
+        const auto& q = g_state.queries[i];
+
+        // SA timed + occurrences
+        double accum_sa = 0.0;
+        size_t sa_occ = 0;
+        for (int r = 0; r < R; ++r) {
+            auto t0 = clock_t::now();
+            auto sa_res = g_state.SA->search(q);
+            auto t1 = clock_t::now();
+            if (r == 0) sa_occ = sa_res.size();
+            accum_sa += std::chrono::duration<double, std::micro>(t1 - t0).count();
+            (void)sa_res;
         }
+        sa_times.push_back(accum_sa / R);
+        sa_occurs.push_back(sa_occ);
+
+        // CSA timed + occurrences (use mutable copy for API taking std::string&)
+        double accum_csa = 0.0;
+        size_t csa_occ = 0;
+        for (int r = 0; r < R; ++r) {
+            std::string q_mut = q;
+            auto t0 = clock_t::now();
+            auto csa_res = g_state.CSA->findPattern(q_mut, g_state.k);
+            auto t1 = clock_t::now();
+            if (r == 0) csa_occ = csa_res.size();
+            accum_csa += std::chrono::duration<double, std::micro>(t1 - t0).count();
+            (void)csa_res;
+        }
+        csa_times.push_back(accum_csa / R);
+        csa_occurs.push_back(csa_occ);
+
+        // Correctness check right here (no extra calls later)
+        if (sa_occ != csa_occ) {
+            std::cerr << "WARNING: Query " << i << " (" << q
+                      << ") mismatch: SA=" << sa_occ
+                      << " CSA=" << csa_occ << "\n";
+        }
+
     }
-    
-    std::cout << "Done.\n\n";
-    
-    // Print statistics
+
+    // Summary
+    printSeparator();
+    std::cout << "SUMMARY (μs/query)\n";
+    printSeparator();
     std::cout << std::fixed << std::setprecision(3);
-    
-    printSeparator();
-    std::cout << "UNCOMPRESSED SUFFIX ARRAY (SA)\n";
-    printSeparator();
-    std::cout << "Mean:      " << mean(sa_times) << " μs\n";
-    std::cout << "Std Dev:   " << stddev(sa_times) << " μs\n";
-    std::cout << "Median:    " << percentile(sa_times, 0.5) << " μs\n";
-    std::cout << "P95:       " << percentile(sa_times, 0.95) << " μs\n";
-    std::cout << "P99:       " << percentile(sa_times, 0.99) << " μs\n";
-    std::cout << "Min:       " << *std::min_element(sa_times.begin(), sa_times.end()) << " μs\n";
-    std::cout << "Max:       " << *std::max_element(sa_times.begin(), sa_times.end()) << " μs\n";
-    
-    std::cout << "\n";
-    printSeparator();
-    std::cout << "COMPRESSED SUFFIX ARRAY (CSA)\n";
-    printSeparator();
-    std::cout << "Mean:      " << mean(csa_times) << " μs\n";
-    std::cout << "Std Dev:   " << stddev(csa_times) << " μs\n";
-    std::cout << "Median:    " << percentile(csa_times, 0.5) << " μs\n";
-    std::cout << "P95:       " << percentile(csa_times, 0.95) << " μs\n";
-    std::cout << "P99:       " << percentile(csa_times, 0.99) << " μs\n";
-    std::cout << "Min:       " << *std::min_element(csa_times.begin(), csa_times.end()) << " μs\n";
-    std::cout << "Max:       " << *std::max_element(csa_times.begin(), csa_times.end()) << " μs\n";
-    
-    std::cout << "\n";
-    printSeparator();
-    std::cout << "PERFORMANCE COMPARISON\n";
-    printSeparator();
-    std::cout << "Slowdown factor (mean):   " << mean(csa_times) / mean(sa_times) << "x\n";
-    std::cout << "Slowdown factor (median): " << percentile(csa_times, 0.5) / percentile(sa_times, 0.5) << "x\n";
-    
-    std::cout << "\n";
-    
-    // Save detailed CSV
-    std::string csv_file = "results_" + g_state.dataset_name + "_k" + 
-                           std::to_string(g_state.k) + ".csv";
+
+    std::cout << "\nSA\n";
+    std::cout << "Mean:   " << mean(sa_times) << " μs\n";
+    std::cout << "StdDev: " << stddev(sa_times) << " μs\n";
+    std::cout << "Median: " << percentile(sa_times, 0.5) << " μs\n";
+    std::cout << "P95:    " << percentile(sa_times, 0.95) << " μs\n";
+    std::cout << "P99:    " << percentile(sa_times, 0.99) << " μs\n";
+    std::cout << "Min:    " << *std::min_element(sa_times.begin(), sa_times.end()) << " μs\n";
+    std::cout << "Max:    " << *std::max_element(sa_times.begin(), sa_times.end()) << " μs\n";
+
+    std::cout << "\nCSA\n";
+    std::cout << "Mean:   " << mean(csa_times) << " μs\n";
+    std::cout << "StdDev: " << stddev(csa_times) << " μs\n";
+    std::cout << "Median: " << percentile(csa_times, 0.5) << " μs\n";
+    std::cout << "P95:    " << percentile(csa_times, 0.95) << " μs\n";
+    std::cout << "P99:    " << percentile(csa_times, 0.99) << " μs\n";
+    std::cout << "Min:    " << *std::min_element(csa_times.begin(), csa_times.end()) << " μs\n";
+    std::cout << "Max:    " << *std::max_element(csa_times.begin(), csa_times.end()) << " μs\n";
+
+    std::cout << "\nSlowdown (mean): "
+              << mean(csa_times) / mean(sa_times) << "x\n";
+
+    // CSV export (write SA occurrences; CSA occurrences can be added if you want both)
+    std::string csv_file = "results_" + g_state.dataset_name
+                           + "_k" + std::to_string(g_state.k) + ".csv";
     std::ofstream csv(csv_file);
     csv << "query_idx,query,sa_time_us,csa_time_us,occurrences\n";
     for (size_t i = 0; i < num_queries; ++i) {
         csv << i << "," << g_state.queries[i] << ","
             << sa_times[i] << "," << csa_times[i] << ","
-            << occurrences[i] << "\n";
+            << sa_occurs[i] << "\n";
     }
     csv.close();
-    
-    std::cout << "Detailed results saved to: " << csv_file << "\n\n";
-    
-    // Output LaTeX table rows
-    std::cout << "LaTeX table rows (for easy copy-paste):\n\n";
-    std::cout << "% Lookup performance row:\n";
-    std::cout << g_state.dataset_name << " & " << g_state.k << " & ... & ... & ... & ... & "
-              << mean(sa_times) << " & " << mean(csa_times) << " \\\\\n\n";
-    
+    std::cout << "\nSaved: " << csv_file << "\n";
+
     printSeparator();
-    std::cout << "BENCHMARK COMPLETE!\n";
+    std::cout << "DONE\n";
     printSeparator();
-    
+
     return 0;
 }

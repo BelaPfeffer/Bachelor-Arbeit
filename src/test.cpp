@@ -39,6 +39,41 @@ std::string findRandSequence(const std::string& text, std::size_t length) {
     return text.substr(start, length);
 }
 
+std::vector<std::string> findRandQueries(const std::string& text, std::size_t length, std::size_t num_sequences) {
+    if (length == 0) return {};
+
+    std::vector<std::size_t> starts;
+    std::vector<std::string> queries;
+
+    std::size_t segStart = 0;
+    while (segStart <= text.size()) {
+        std::size_t next = text.find('$', segStart);
+        std::size_t segEnd = (next == std::string::npos) ? text.size() : next;
+
+        if (segEnd > segStart && segEnd - segStart >= length) {
+            for (std::size_t s = segStart; s + length <= segEnd; ++s) {
+                starts.push_back(s);
+            }
+        }
+
+        if (next == std::string::npos) break;
+        segStart = next + 1;
+    }
+
+    if (starts.empty()) return {};
+
+    static uint64_t seed = 123456789; // choose a fixed value for reproducibility
+    static std::mt19937 rng(seed);
+    std::uniform_int_distribution<std::size_t> dist(0, starts.size() - 1);
+    for (std::size_t i = 0; i < num_sequences; ++i) {
+        std::size_t start = starts[dist(rng)];
+        queries.push_back(text.substr(start, length));
+    }
+    return queries;
+}
+
+
+
 void testCorrectness(const std::string& text, const std::string& kmer, const std::vector<uint64_t>& output_pos)
 {
     csa_bitcompressed<> csa;

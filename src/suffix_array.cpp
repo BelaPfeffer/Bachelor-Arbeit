@@ -149,7 +149,7 @@ void SuffixArray::printLCPArray() const {
     }
 }
 
-// --- Binary search over SA without creating substrings ---
+// --- FIXED Binary search for pattern matching ---
 std::vector<uint64_t> SuffixArray::search(const std::string& pattern) const {
     std::vector<uint64_t> result;
     if (pattern.empty() || suffixArray.empty()) return result;
@@ -158,31 +158,39 @@ std::vector<uint64_t> SuffixArray::search(const std::string& pattern) const {
     const size_t N = text.size();
     const size_t m = pattern.size();
 
-    auto suffix_less_than_pattern = [&](uint64_t sa_pos, const std::string& p) {
-        const size_t tlen  = N - static_cast<size_t>(sa_pos);
-        const size_t limit = (m < tlen) ? m : tlen;
-        const int c = std::char_traits<char>::compare(T + sa_pos, p.data(), limit);
-        if (c != 0) return c < 0;
-        // equal up to min; shorter string is lexicographically smaller
-        return tlen < m;
-    };
-
-    auto pattern_less_than_suffix = [&](const std::string& p, uint64_t sa_pos) {
-        const size_t tlen  = N - static_cast<size_t>(sa_pos);
-        const size_t limit = (m < tlen) ? m : tlen;
-        const int c = std::char_traits<char>::compare(p.data(), T + sa_pos, limit);
-        if (c != 0) return c < 0;
-        return m < tlen;
-    };
-
+    // Find the first suffix that is >= pattern (could start with pattern)
     auto first_it = std::lower_bound(
-        suffixArray.begin(), suffixArray.end(), pattern, suffix_less_than_pattern);
+        suffixArray.begin(), suffixArray.end(), pattern,
+        [&](uint64_t sa_pos, const std::string& p) {
+            // Compare suffix at sa_pos with pattern
+            size_t tlen = N - sa_pos;
+            size_t cmp_len = std::min(m, tlen);
+            int c = std::char_traits<char>::compare(T + sa_pos, p.data(), cmp_len);
+            if (c != 0) return c < 0;
+            // If equal up to cmp_len: suffix < pattern only if suffix is shorter than pattern
+            return tlen < m;
+        });
 
-    auto last_it  = std::upper_bound(
-        first_it, suffixArray.end(), pattern, pattern_less_than_suffix);
+    // Find the first suffix that does NOT start with pattern
+    // We compare only the first m characters
+    auto last_it = first_it;
+    while (last_it != suffixArray.end()) {
+        uint64_t sa_pos = *last_it;
+        size_t tlen = N - sa_pos;
+        size_t cmp_len = std::min(m, tlen);
+        
+        // Check if this suffix starts with pattern
+        int c = std::char_traits<char>::compare(T + sa_pos, pattern.data(), cmp_len);
+        if (c != 0 || cmp_len < m) {
+            // Either doesn't match, or suffix is shorter than pattern
+            break;
+        }
+        ++last_it;
+    }
 
-    for (auto it = first_it; it != last_it; ++it)
+    for (auto it = first_it; it != last_it; ++it) {
         result.push_back(*it); // *it is a text position
+    }
 
     return result;
 }
@@ -198,36 +206,37 @@ SuffixArray::search_val_and_pos(const std::string& pattern) const {
     const size_t N = text.size();
     const size_t m = pattern.size();
 
-    auto suffix_less_than_pattern = [&](uint64_t sa_pos, const std::string& p) {
-        const size_t tlen  = N - static_cast<size_t>(sa_pos);
-        const size_t limit = (m < tlen) ? m : tlen;
-        const int c = std::char_traits<char>::compare(T + sa_pos, p.data(), limit);
-        if (c != 0) return c < 0;
-        return tlen < m;
-    };
-
-    auto pattern_less_than_suffix = [&](const std::string& p, uint64_t sa_pos) {
-        const size_t tlen  = N - static_cast<size_t>(sa_pos);
-        const size_t limit = (m < tlen) ? m : tlen;
-        const int c = std::char_traits<char>::compare(p.data(), T + sa_pos, limit);
-        if (c != 0) return c < 0;
-        return m < tlen;
-    };
-
+    // Find the first suffix that is >= pattern
     auto first_it = std::lower_bound(
-        suffixArray.begin(), suffixArray.end(), pattern, suffix_less_than_pattern);
+        suffixArray.begin(), suffixArray.end(), pattern,
+        [&](uint64_t sa_pos, const std::string& p) {
+            size_t tlen = N - sa_pos;
+            size_t cmp_len = std::min(m, tlen);
+            int c = std::char_traits<char>::compare(T + sa_pos, p.data(), cmp_len);
+            if (c != 0) return c < 0;
+            return tlen < m;
+        });
 
-    auto last_it  = std::upper_bound(
-        first_it, suffixArray.end(), pattern, pattern_less_than_suffix);
+    // Find all suffixes that start with pattern
+    auto last_it = first_it;
+    while (last_it != suffixArray.end()) {
+        uint64_t sa_pos = *last_it;
+        size_t tlen = N - sa_pos;
+        size_t cmp_len = std::min(m, tlen);
+        
+        int c = std::char_traits<char>::compare(T + sa_pos, pattern.data(), cmp_len);
+        if (c != 0 || cmp_len < m) {
+            break;
+        }
+        ++last_it;
+    }
 
     for (auto it = first_it; it != last_it; ++it) {
-        // Optional equality guard
-        if (text.compare(static_cast<size_t>(*it), m, pattern) == 0) {
-            values.push_back(*it); // text position
-            positions.push_back(static_cast<uint64_t>(
-                static_cast<size_t>(it - suffixArray.begin()))); // SA index
-        }
+        values.push_back(*it); // text position
+        positions.push_back(static_cast<uint64_t>(
+            static_cast<size_t>(it - suffixArray.begin()))); // SA index
     }
+    
     return {values, positions};
 }
 

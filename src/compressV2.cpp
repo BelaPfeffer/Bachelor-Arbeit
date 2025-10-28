@@ -9,6 +9,14 @@
 
 #include <sdsl/suffix_array_algorithm.hpp>
 
+uint64_t buildDollarMask(unsigned k) {
+    uint64_t mask = 0;
+    for (unsigned i = 0; i < k; ++i) {
+        mask |= (uint64_t(4) << (3 * i));
+    }
+    return mask;
+}
+
 void computeSA::setBits(lcp_interval& iv, bool bitVal)
 {
     std::fill(computeSuffix.begin() + iv.left, computeSuffix.begin() + iv.right + 1, bitVal);
@@ -171,150 +179,142 @@ void computeSA::initComputeSuffix(unsigned k)
         }
     }
 }
-
 void computeSA::compression(const unsigned k, lcp_interval& interval)
 {
-    // std::cout << "rankCalc: " << rankSupport(interval.right + 1) - rankSupport(interval.left) << "\n";
-    // Check 
-    if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
-    {
+    // Early exit if interval already fully processed (all bits cleared).
+    if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0) {
         std::cout << "Interval already computed or no valid kmer in interval.\n";
         return;
     }
 
-    //copies the suffixArray data in the CSA
-    std::copy(suffixArray.begin() + interval.left, suffixArray.begin() + interval.right + 1, std::back_inserter(CSA));
-    
-    unsigned pat_pos_index = suffixArray[interval.min_index];
-    unsigned pattern_length = lcpArray[interval.min_index];
-    // std::cout << "Index des Musters im Text: " << pat_pos_index << ", Länge des Musters: " << pattern_length << "\n";
-    unsigned long occurences = interval.right - interval.left + 1;  // Anzahl der Vorkommen des Musters im SuffixArray
-    unsigned long current_csa_index = CSA.size() - occurences;
+    // 1) Materialize the base interval into the CSA once.
+    std::copy(suffixArray.begin() + interval.left,
+              suffixArray.begin() + interval.right + 1,
+              std::back_inserter(CSA));
 
+    // Base pattern info
+    const unsigned pat_pos_index  = suffixArray[interval.min_index];
+    const unsigned pattern_length = lcpArray[interval.min_index];
+    const unsigned long base_occ_total = interval.right - interval.left + 1;
 
-    uint64_t kmer_old = encode_dna5(text.substr(pat_pos_index, k));
+    // Base k-mer (the first window of length k at the base pattern start)
+    const uint64_t kmer_old = encode_dna5(text.substr(pat_pos_index, k));
 
+    // Record value for the base k-mer (now materialized in CSA).
+    const unsigned long base_csa_index = CSA.size() - base_occ_total;
+    setValue(kmer_old, base_csa_index, base_occ_total);
 
-    setValue(kmer_old, current_csa_index, occurences); // das könnte probleme geben wenn compressed SA noch leer ist
-    lcpIntervals[hashMap[kmer_old].lcp_interval_index] = std::nullopt; 
-    //wenn ich diese Zeilen Rausnehme könnte man Ringschluss bilden sodass die anzahl der Gespeicherten Suffixe noch kleiner wird. 
-    //BSP.: Ich habe ACCGA als erstes Kompressionspattern benutzt später finde ich dann ATACCGA -> ACCGA kann in Abhängigkeit von 
-    //ATACCGA dargestellt werden -> alle Pattern die in Abhängigkeit von ACCGA dargestellt werden können auch mit ATACCGA dargestellt werden.
-    //Dazu müsste man nur ACCGA aus SA löschen und in Abhängigkeit von ATACCGA's Position im Text darstellen.
+    // Invalidate the base interval entry in lcpIntervals.
+    const auto base_it = hashMap.find(kmer_old);
+    if (base_it != hashMap.end() && base_it->second.lcp_interval_index < lcpIntervals.size()) {
+        lcpIntervals[base_it->second.lcp_interval_index] = std::nullopt;
+    }
 
-    setBits(interval, 0); // Markiere alle Suffixe im Intervall als computed
+    // Mark every suffix in the base SA range as computed (bits -> 0).
+    setBits(interval, 0);
 
-    // std::cout << "Suffix: " << text.substr(pat_pos_index) << "\n";
+    // Nothing more to do if LCP pattern is only k long.
+    if (pattern_length <= k) return;
 
-    // this -> printcomputeSA();
-    // this -> printMap(k);
+    // Reusable constants
+    const uint64_t mask = buildDollarMask(k);
 
-    // ab hier nochmal gucken
-
-    uint64_t shift = 1;
-    uint64_t mask = 0b100100100;
-    ////HIER IST DER BUG DRIN
-    unsigned text_index = pat_pos_index + shift;
-
-    if (pattern_length <= k) return; // Pattern ist nur ein kmer lang
-
-    for (unsigned long i = pat_pos_index + shift; i < pat_pos_index + pattern_length - k; i ++) 
+    // 2) Slide the k-mer window inside the longer pattern.
+    // shift must equal i - pat_pos_index at all times. Never increment it manually.
+    for (unsigned long i = pat_pos_index + 1;
+         i <= pat_pos_index + pattern_length - k;
+         ++i)
     {
-        // std::cout << "i: " << i << "\n";
+        const uint64_t shift = i - pat_pos_index;
 
-        unsigned kmer_new = encode_dna5(text.substr(i,k));
+        // Skip kmers that include a sentinel ($).
+        const uint64_t kmer_new = encode_dna5(text.substr(i, k));
+        if ((kmer_new & mask) != 0) continue;
 
-        if ((kmer_new & mask) > 0) {shift++; continue;} //kmer contains $
+        // Must exist in hash map and lcpIntervals.
+        auto it_new = hashMap.find(kmer_new);
+        if (it_new == hashMap.end()) continue;
 
-        // std::cout << "kmer_new: " << decode_dna5(kmer_new,k) << std::endl;
-        if (hashMap.find(kmer_new) == hashMap.end())
-        {
-            shift++;
-            continue;
-        }
-        unsigned interval_index = hashMap[kmer_new].lcp_interval_index;
-        if (interval_index >= lcpIntervals.size())
-        {
-            shift++;
-            continue;
-        }
-        // printMap(k);
-        lcp_interval temp_interval;
+        const unsigned interval_index = it_new->second.lcp_interval_index;
+        if (interval_index >= lcpIntervals.size()) continue;
+        if (!lcpIntervals[interval_index].has_value()) continue;
 
-        if (lcpIntervals[interval_index] == std::nullopt) // Interval already computed or no valid kmer in Interval
-        {
-            // std::cout << "skipped 1" << std::endl;
-            shift++;
+        // Avoid self-interval reprocessing: if new interval equals the base's, skip.
+        if (base_it != hashMap.end()
+            && interval_index == base_it->second.lcp_interval_index) {
             continue;
         }
 
-        temp_interval = lcpIntervals[interval_index].value();
+        // Temporary interval for kmer_new
+        lcp_interval temp_interval = lcpIntervals[interval_index].value();
+
+        // Counts of "uncomputed" suffixes (rank over bits).
         unsigned count = rankSupport(temp_interval.right + 1) - rankSupport(temp_interval.left);
-
-        
-        unsigned long x = 0;
-        unsigned long y = 0;
-        
-        // std::cout << "count: " << count << ", occurences: " << occurences << ", kmer: " <<text.substr(text_pos_kmer_new,k) <<  "\n";
-
-        // std::cout << "text_pos_kmer_new: " << text_pos_kmer_new << ", text_pos_kmer_old + shift: " << text_pos_kmer_old + shift  << "\n";
-
-        while (count > occurences && occurences > 0)
-        {
-            auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
-            auto text_pos_kmer_old = suffixArray[interval.left + y];
-            
-
-            if (text_pos_kmer_new != (text_pos_kmer_old + shift) )
-            {   
-                CSA.push_back(text_pos_kmer_new); 
-                setValue(kmer_new, CSA.size() - 1, 1);
-                x++;
-                count--;
-                // std::cout << "x :" << x << ", y: " << y << std::endl;
-                // std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
-                
-                
-                continue;
-            }
-            
-            x++;
-            y++;
-            // std::cout << "x :" << x << ", y: " << y << std::endl;
-            // std::cout << "Pattern for compression: " << text.substr(pat_pos_index,text.size()) << "\n";
-            // std::cout << "text_pos_kmerr_new: " << text.substr(text_pos_kmer_new,k) <<", " << text_pos_kmer_new << "\n";
-            // std::cout << "text_pos_kmerr_old + shift: " << text.substr(text_pos_kmer_old + shift,k) <<", " << text_pos_kmer_old + shift <<", shift: " << shift <<  "\n";
-            // std::cout <<" temp_interval.left + x: " << temp_interval.left + x << " SuffixArray.size(): " << suffixArray.size() << std::endl;
-            // std::cout <<" interval.left + y: " << interval.left + y << " SuffixArray.size(): " << suffixArray.size() << std::endl;
-            // std::cout << "FLAG" << std::endl;
-            count--;
-            occurences--;
+        if (count == 0) {
+            // Already fully consumed/computed elsewhere.
+            lcpIntervals[interval_index] = std::nullopt;
+            continue;
         }
 
-        if(occurences < count)
-        {   
-            while(count > 0)
-            {   
-                auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
+        // Fresh comparator per k-mer against the full base capacity.
+        unsigned long remaining_base = base_occ_total;
+
+        // Two-pointer sweep over SA ranges (both are in SA order).
+        unsigned long x = 0; // offset in temp_interval
+        unsigned long y = 0; // offset in base interval
+
+        // Walk while new interval still has strictly more suffixes than the base can "explain"
+        // and while base still has capacity to match.
+        while (count > remaining_base && remaining_base > 0) {
+            const auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
+            const auto text_pos_kmer_old = suffixArray[interval.left + y];
+
+            // If this new suffix cannot be represented by "old + shift", materialize it.
+            if (text_pos_kmer_new != (text_pos_kmer_old + shift)) {
                 CSA.push_back(text_pos_kmer_new);
                 setValue(kmer_new, CSA.size() - 1, 1);
-                x++;
-                count--;
+                ++x;
+                --count;
+                continue;
             }
-            
+
+            // Otherwise they match under the shift; consume one from each side.
+            ++x;
+            ++y;
+            --count;
+            --remaining_base;
         }
 
-        // this -> printcomputeSA();
-        setBits(temp_interval, 0); // Markiere alle Suffixe im Intervall als computed
-        lcpIntervals[interval_index] = std::nullopt; // Setze das Intervall auf uninitialisiert
-        setReferenceValue(kmer_new, shift,hashMap[kmer_old].occurences, hashMap[kmer_old].cSAindex, true);
-        text_index ++;
-        shift++;
-    
+        // If there are more new suffixes than the base can cover, materialize the remainder.
+        if (remaining_base < count) {
+            while (count > 0) {
+                const auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
+                CSA.push_back(text_pos_kmer_new);
+                setValue(kmer_new, CSA.size() - 1, 1);
+                ++x;
+                --count;
+            }
+        }
+
+        // Mark this new interval fully computed and invalidate its lcp entry.
+        setBits(temp_interval, 0);
+        lcpIntervals[interval_index] = std::nullopt;
+
+        // Store reference metadata for kmer_new to the base k-mer,
+        // but never self-reference.
+        if (kmer_new != kmer_old && base_it != hashMap.end()) {
+            const auto& base_meta = base_it->second;
+            setReferenceValue(kmer_new, static_cast<int>(shift),
+                              base_meta.occurences, base_meta.cSAindex, true);
+        }
     }
-    
 
 }
+
+    
+
+
+
 
 void computeSA::printIntervals(unsigned k)
 {   

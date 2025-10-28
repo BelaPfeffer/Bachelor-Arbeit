@@ -41,7 +41,9 @@ std::string compressedSA::decode_dna5(uint64_t encoded, unsigned k)
 
 std::vector<uint64_t> compressedSA::findPattern(std::string& kmer, unsigned k)
 {
-    if(kmer.size() != k) throw std::invalid_argument("Pattern size must be equal to kmer size");
+    if (kmer.size() != k) {
+        throw std::invalid_argument("Pattern size must be equal to kmer size");
+    }
 
     std::string retString = "[";
 
@@ -51,42 +53,42 @@ std::vector<uint64_t> compressedSA::findPattern(std::string& kmer, unsigned k)
 
     uint64_t encoded_kmer = encode_dna5(kmer);
     hashValue curr_value = hashMap[encoded_kmer];
+;
 
     isReference = (curr_value.refOccurrences != 0);
-    isinCSA = (curr_value.occurences != 0);
+    isinCSA     = (curr_value.occurences != 0);
+
     // std::cout << "isReference: " << isReference << ", isinCSA: " << isinCSA << "\n";
-    if(isinCSA)
-    {   
-        unsigned occ = curr_value.occurences;
-        unsigned csa_index = curr_value.cSAindex; 
+    if (isinCSA) {
+        unsigned occ       = curr_value.occurences;
+        unsigned csa_index = curr_value.cSAindex;
         // std::cout << "csa_index: " << csa_index << ", occ: " << occ << "\n";
-        for (unsigned long i = csa_index; i < csa_index + occ; i++)
-        {
+        for (unsigned long i = csa_index; i < csa_index + occ; ++i) {
             positions.emplace_back(CSA[i]);
             retString += std::to_string(CSA[i]) + ",";
         }
     }
 
-    if (isReference)
-    {
-        unsigned trace = curr_value.traceback_key;
-        unsigned long refOcc = curr_value.refOccurrences;
-        int shift = curr_value.shift;
+    if (isReference) {
+        unsigned trace          = curr_value.traceback_key;
+        unsigned long refOcc    = curr_value.refOccurrences;
+        int shift               = curr_value.shift;
         // std::cout << "trace: " << trace << ", refOcc: " << refOcc << ", shift: " << shift << "\n";
 
-        for (unsigned long i = trace; i < trace + refOcc; i++)
-        {
+        for (unsigned long i = trace; i < trace + refOcc; ++i) {
             positions.emplace_back(CSA[i] + shift);
             retString += std::to_string(CSA[i] + shift) + ",";
         }
     }
-    
+
     retString[retString.size() - 1] = ']';
 
     // std::cout << "Pattern kommt " << positions.size() << " mal vor in der Text, An Positionen: " << retString << "\n";
-    
+
     return positions;
 }
+
+
 
 size_t compressedSA::memoryUsageBytes() const {
     size_t totalMemory = 0;
