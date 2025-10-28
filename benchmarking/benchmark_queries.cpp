@@ -129,17 +129,19 @@ int main(int argc, char** argv) {
 
     using clock_t = std::chrono::steady_clock;
 
-    std::vector<double> sa_times;   sa_times.reserve(num_queries);
-    std::vector<double> csa_times;  csa_times.reserve(num_queries);
-    std::vector<size_t> sa_occurs;  sa_occurs.reserve(num_queries);
-    std::vector<size_t> csa_occurs; csa_occurs.reserve(num_queries);
+// Aggregatoren: direkt auf Größe setzen (nicht nur reserve),
+// damit wir pro Query auf den Index akkumulieren können.
+    std::vector<double> sa_times(num_queries, 0.0);
+    std::vector<double> csa_times(num_queries, 0.0);
+    std::vector<size_t> sa_occurs(num_queries, 0);
+    std::vector<size_t> csa_occurs(num_queries, 0);
 
     printSeparator();
     std::cout << "MEASURING PER-QUERY TIMES (μs, averaged)\n";
     printSeparator();
 
-    // Warmup (pass a mutable copy to CSA in case it mutates the input)
-    for (auto& q : g_state.queries) {
+    // Warmup (mutabler String für CSA, falls API non-const)
+    for (const auto& q : g_state.queries) {
         (void)g_state.SA->search(q);
         std::string qm = q;
         (void)g_state.CSA->findPattern(qm, g_state.k);
@@ -147,46 +149,65 @@ int main(int argc, char** argv) {
 
     const int R = static_cast<int>(g_state.reps);
 
-    for (size_t i = 0; i < num_queries; ++i) {
-        const auto& q = g_state.queries[i];
+    // Hilfsfunktion für gemessene Zeit (µs)
+    auto dur_us = [](clock_t::time_point a, clock_t::time_point b){
+        return std::chrono::duration<double, std::micro>(b - a).count();
+    };
 
-        // SA timed + occurrences
-        double accum_sa = 0.0;
-        size_t sa_occ = 0;
-        for (int r = 0; r < R; ++r) {
-            auto t0 = clock_t::now();
-            auto sa_res = g_state.SA->search(q);
-            auto t1 = clock_t::now();
-            if (r == 0) sa_occ = sa_res.size();
-            accum_sa += std::chrono::duration<double, std::micro>(t1 - t0).count();
-            (void)sa_res;
+    // Drei (oder R) Pässe über die GESAMTE Query-Menge, jeweils anderer Shuffle.
+    // Cross-over: in geraden Pässen SA→CSA, in ungeraden CSA→SA.
+    for (int r = 0; r < R; ++r) {
+        // deterministisches Shuffling pro Pass
+        std::vector<size_t> order(num_queries);
+        std::iota(order.begin(), order.end(), size_t{0});
+        std::mt19937_64 rng(static_cast<uint64_t>(123456789) + static_cast<uint64_t>(r));
+        std::shuffle(order.begin(), order.end(), rng);
+
+        const bool sa_first = (r % 2 == 0);
+
+        for (size_t idx = 0; idx < num_queries; ++idx) {
+            size_t i = order[idx];
+            const auto& q = g_state.queries[i];
+
+            auto measure_sa = [&] () -> double {
+                auto t0 = clock_t::now();
+                auto res = g_state.SA->search(q);
+                auto t1 = clock_t::now();
+                if (r == 0) sa_occurs[i] = res.size(); // einmal pro Query erfassen
+                return dur_us(t0, t1);
+            };
+
+            auto measure_csa = [&] () -> double {
+                std::string q_mut = q; // falls API mutiert
+                auto t0 = clock_t::now();
+                auto res = g_state.CSA->findPattern(q_mut, g_state.k);
+                auto t1 = clock_t::now();
+                if (r == 0) csa_occurs[i] = res.size();
+                return dur_us(t0, t1);
+            };
+
+            double dt_sa = 0.0, dt_csa = 0.0;
+            if (sa_first) {
+                dt_sa  = measure_sa();
+                dt_csa = measure_csa();
+            } else {
+                dt_csa = measure_csa();
+                dt_sa  = measure_sa();
+            }
+
+            // Über R-Pässe gemittelten Wert akkumulieren
+            sa_times[i]  += dt_sa  / R;
+            csa_times[i] += dt_csa / R;
+
+            // Korrektheitscheck nur im ersten Pass (spart Arbeit)
+            if (r == 0 && sa_occurs[i] != csa_occurs[i]) {
+                std::cerr << "WARNING: Query " << i << " (" << q
+                        << ") mismatch: SA=" << sa_occurs[i]
+                        << " CSA=" << csa_occurs[i] << "\n";
+            }
         }
-        sa_times.push_back(accum_sa / R);
-        sa_occurs.push_back(sa_occ);
-
-        // CSA timed + occurrences (use mutable copy for API taking std::string&)
-        double accum_csa = 0.0;
-        size_t csa_occ = 0;
-        for (int r = 0; r < R; ++r) {
-            std::string q_mut = q;
-            auto t0 = clock_t::now();
-            auto csa_res = g_state.CSA->findPattern(q_mut, g_state.k);
-            auto t1 = clock_t::now();
-            if (r == 0) csa_occ = csa_res.size();
-            accum_csa += std::chrono::duration<double, std::micro>(t1 - t0).count();
-            (void)csa_res;
-        }
-        csa_times.push_back(accum_csa / R);
-        csa_occurs.push_back(csa_occ);
-
-        // Correctness check right here (no extra calls later)
-        if (sa_occ != csa_occ) {
-            std::cerr << "WARNING: Query " << i << " (" << q
-                      << ") mismatch: SA=" << sa_occ
-                      << " CSA=" << csa_occ << "\n";
-        }
-
     }
+
 
     // Summary
     printSeparator();
