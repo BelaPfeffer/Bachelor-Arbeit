@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
     std::cout << "Shuffle:      " << (shuffle_q ? "yes" : "no") << "\n\n";
 
     // Filenames
-    std::string sa_file  = "indices/" + g_state.dataset_name + "_k" + std::to_string(g_state.k) + "_sa.bin";
+    std::string sa_file  = "indices/" + g_state.dataset_name + "_sa.bin";
     std::string csa_file = "indices/" + g_state.dataset_name + "_k" + std::to_string(g_state.k) + "_csa.bin";
 
     // Load SA

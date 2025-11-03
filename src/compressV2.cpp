@@ -17,11 +17,21 @@ uint64_t buildDollarMask(unsigned k) {
     return mask;
 }
 
+static inline uint8_t dna5_code(char c) {
+    switch (c) { case 'A': return 0; case 'C': return 1; case 'G': return 2; case 'T': return 3; case '$': return 4; }
+    throw std::invalid_argument("Invalid character in DNA sequence");
+}
+
+static inline uint64_t roll_kmer(uint64_t kmer, uint8_t next_code, unsigned k) {
+    const uint64_t keep_mask = (k == 21) ? ~0ULL : ((1ULL << (3ULL * (k - 1))) - 1ULL);
+    return ((kmer & keep_mask) << 3) | next_code;
+}
+
 void computeSA::setBits(lcp_interval& iv, bool bitVal)
 {
     std::fill(computeSuffix.begin() + iv.left, computeSuffix.begin() + iv.right + 1, bitVal);
-    sdsl::util::init_support(rankSupport, &computeSuffix); // Reinitialize rank support after modifying computeSuffix
 }
+
 
 void computeSA::printComputeSA()
 {
@@ -159,14 +169,12 @@ lcp_interval computeSA::get_lcp_interval(unsigned i, unsigned k)
 bool computeSA::filterSA(const unsigned k, unsigned i)
 {
     unsigned long suffix = suffixArray[i];
-    if (suffix + k > text.size()) {
-        return false; // Suffix is too short to contain a k-mer of length k
-    }
-    else if( text.substr(suffix, k).find('$') != std::string::npos) {
-        return false; // Suffix contains the end character '$'
-    }
+    if (suffix + k > text.size()) return false;
+    for (unsigned j = 0; j < k; ++j)
+        if (text[suffix + j] == '$') return false;
     return true;
 }
+
 
 void computeSA::initComputeSuffix(unsigned k)
 {
@@ -179,13 +187,11 @@ void computeSA::initComputeSuffix(unsigned k)
         }
     }
 }
+
 void computeSA::compression(const unsigned k, lcp_interval& interval)
 {
-    // Early exit if interval already fully processed (all bits cleared).
-    if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0) {
-        std::cout << "Interval already computed or no valid kmer in interval.\n";
-        return;
-    }
+    // Buckets are disjoint; if an interval is present, it has content.
+    if (interval.right < interval.left) return;
 
     // 1) Materialize the base interval into the CSA once.
     std::copy(suffixArray.begin() + interval.left,
@@ -197,20 +203,21 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
     const unsigned pattern_length = lcpArray[interval.min_index];
     const unsigned long base_occ_total = interval.right - interval.left + 1;
 
-    // Base k-mer (the first window of length k at the base pattern start)
-    const uint64_t kmer_old = encode_dna5(text.substr(pat_pos_index, k));
+    // Base k-mer (first window at pattern start), built once
+    uint64_t kmer = 0;
+    for (unsigned t = 0; t < k; ++t) kmer = (kmer << 3) | dna5_code(text[pat_pos_index + t]);
+    const uint64_t kmer_old = kmer;
 
     // Record value for the base k-mer (now materialized in CSA).
     const unsigned long base_csa_index = CSA.size() - base_occ_total;
     setValue(kmer_old, base_csa_index, base_occ_total);
 
-    // Invalidate the base interval entry in lcpIntervals.
+    // Invalidate the base interval entry in lcpIntervals (if present).
     const auto base_it = hashMap.find(kmer_old);
-    if (base_it != hashMap.end() && base_it->second.lcp_interval_index < lcpIntervals.size()) {
+    if (base_it != hashMap.end() && base_it->second.lcp_interval_index < lcpIntervals.size())
         lcpIntervals[base_it->second.lcp_interval_index] = std::nullopt;
-    }
 
-    // Mark every suffix in the base SA range as computed (bits -> 0).
+    // Mark every suffix in the base SA range as computed (optional; rank not used now).
     setBits(interval, 0);
 
     // Nothing more to do if LCP pattern is only k long.
@@ -220,15 +227,15 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
     const uint64_t mask = buildDollarMask(k);
 
     // 2) Slide the k-mer window inside the longer pattern.
-    // shift must equal i - pat_pos_index at all times. Never increment it manually.
-    for (unsigned long i = pat_pos_index + 1;
-         i <= pat_pos_index + pattern_length - k;
-         ++i)
+    for (unsigned long i = pat_pos_index + 1; i <= pat_pos_index + pattern_length - k; ++i)
     {
         const uint64_t shift = i - pat_pos_index;
 
+        // O(1) rolling update for the new k-mer
+        kmer = roll_kmer(kmer, dna5_code(text[i + k - 1]), k);
+        const uint64_t kmer_new = kmer;
+
         // Skip kmers that include a sentinel ($).
-        const uint64_t kmer_new = encode_dna5(text.substr(i, k));
         if ((kmer_new & mask) != 0) continue;
 
         // Must exist in hash map and lcpIntervals.
@@ -239,60 +246,41 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
         if (interval_index >= lcpIntervals.size()) continue;
         if (!lcpIntervals[interval_index].has_value()) continue;
 
-        // Avoid self-interval reprocessing: if new interval equals the base's, skip.
-        if (base_it != hashMap.end()
-            && interval_index == base_it->second.lcp_interval_index) {
-            continue;
-        }
+        // Avoid self-interval reprocessing (same interval as base).
+        if (base_it != hashMap.end() && interval_index == base_it->second.lcp_interval_index) continue;
 
         // Temporary interval for kmer_new
         lcp_interval temp_interval = lcpIntervals[interval_index].value();
 
-        // Counts of "uncomputed" suffixes (rank over bits).
-        unsigned count = rankSupport(temp_interval.right + 1) - rankSupport(temp_interval.left);
-        if (count == 0) {
-            // Already fully consumed/computed elsewhere.
-            lcpIntervals[interval_index] = std::nullopt;
-            continue;
-        }
+        // Buckets are disjoint: number of items in this new interval:
+        unsigned count = static_cast<unsigned>(temp_interval.right - temp_interval.left + 1);
+        if (count == 0) { lcpIntervals[interval_index] = std::nullopt; continue; }
 
-        // Fresh comparator per k-mer against the full base capacity.
         unsigned long remaining_base = base_occ_total;
-
-        // Two-pointer sweep over SA ranges (both are in SA order).
         unsigned long x = 0; // offset in temp_interval
         unsigned long y = 0; // offset in base interval
 
-        // Walk while new interval still has strictly more suffixes than the base can "explain"
-        // and while base still has capacity to match.
+        // Two-pointer sweep while there are more new suffixes than base can cover
         while (count > remaining_base && remaining_base > 0) {
             const auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
             const auto text_pos_kmer_old = suffixArray[interval.left + y];
 
-            // If this new suffix cannot be represented by "old + shift", materialize it.
             if (text_pos_kmer_new != (text_pos_kmer_old + shift)) {
                 CSA.push_back(text_pos_kmer_new);
                 setValue(kmer_new, CSA.size() - 1, 1);
-                ++x;
-                --count;
+                ++x; --count;
                 continue;
             }
-
-            // Otherwise they match under the shift; consume one from each side.
-            ++x;
-            ++y;
-            --count;
-            --remaining_base;
+            ++x; ++y; --count; --remaining_base;
         }
 
-        // If there are more new suffixes than the base can cover, materialize the remainder.
+        // Materialize the remainder if base cannot cover it.
         if (remaining_base < count) {
             while (count > 0) {
                 const auto text_pos_kmer_new = suffixArray[temp_interval.left + x];
                 CSA.push_back(text_pos_kmer_new);
                 setValue(kmer_new, CSA.size() - 1, 1);
-                ++x;
-                --count;
+                ++x; --count;
             }
         }
 
@@ -300,16 +288,15 @@ void computeSA::compression(const unsigned k, lcp_interval& interval)
         setBits(temp_interval, 0);
         lcpIntervals[interval_index] = std::nullopt;
 
-        // Store reference metadata for kmer_new to the base k-mer,
-        // but never self-reference.
+        // Store reference metadata for kmer_new to the base k-mer (if different).
         if (kmer_new != kmer_old && base_it != hashMap.end()) {
             const auto& base_meta = base_it->second;
             setReferenceValue(kmer_new, static_cast<int>(shift),
                               base_meta.occurences, base_meta.cSAindex, true);
         }
     }
-
 }
+
 
     
 
@@ -377,84 +364,54 @@ unsigned computeSA::calc_priority2(lcp_interval& interval) const
 
 void computeSA::initLCPintervalsAndHashmap(const unsigned k)
 {
-    unsigned i = sdsl::util::next_bit(computeSuffix,0);
+    unsigned i = sdsl::util::next_bit(computeSuffix, 0);
     while (i < lcpArray.size())
     {
-        lcp_interval interval = get_lcp_interval(i,k);
+        lcp_interval interval = get_lcp_interval(i, k);
         interval.priority = calc_priority(interval);
 
-        if (rankSupport(interval.right + 1) - rankSupport(interval.left) == 0)
-        {
-            i = interval.right + 1;
-            continue; // Skip if no valid k-mer in interval
-        }
-        unsigned long pos = suffixArray[interval.min_index];
-        std::string kmer = text.substr(pos, k);
-        uint64_t encodedKmer = encode_dna5(kmer);
-        lcpIntervals.push_back(interval);
-        this -> initHash(encodedKmer, lcpIntervals.size() - 1); // Store the interval index in the hash map
-        
-        i = interval.right + 1; // Move to the next interval
+        // One-time cheap check: any alive bit in [left,right]?
+        unsigned alive = 0;
+        for (unsigned p = interval.left; p <= interval.right; ++p) alive += computeSuffix[p];
+        if (alive == 0) { i = interval.right + 1; continue; }
 
-        // for (unsigned long j = 0; j < kmer.size(); j++)
-        // {
-        //     std::cout << kmer[j];
-        // }
-        // std::cout << "\n";
+        unsigned long pos = suffixArray[interval.min_index];
+        // encode directly from text (no substr needed here either, but substr is OK once)
+        uint64_t encodedKmer = 0;
+        for (unsigned t = 0; t < k; ++t) encodedKmer = (encodedKmer << 3) | dna5_code(text[pos + t]);
+
+        lcpIntervals.push_back(interval);
+        this->initHash(encodedKmer, lcpIntervals.size() - 1);
+
+        i = interval.right + 1;
     }
-    // printSuffixArray();
-    // printIntervals (k);
 }
 
 void computeSA::runCompression(const unsigned k)
-{   
-    std::vector<unsigned> interval_indeces (lcpIntervals.size());
+{
+    std::vector<unsigned> interval_indeces(lcpIntervals.size());
     std::iota(interval_indeces.begin(), interval_indeces.end(), 0);
-    std::sort(interval_indeces.begin(), interval_indeces.end(), [this](unsigned i1, unsigned i2) { return lcpIntervals[i1] -> priority < lcpIntervals[i2] -> priority; });
 
-    for (unsigned long i = 0; i < interval_indeces.size(); i++)
-    {
-        lcp_interval interval = lcpIntervals[interval_indeces[i]].value();
-        std::string kmer = text.substr(suffixArray[interval.min_index], k);
-        // std::cout << "Index: " << interval_indeces[i] << ", Priority: " << lcpIntervals[interval_indeces[i]] -> priority << "kmer: "<< kmer << "\n";
+    // Guard against nullopt in comparator
+    std::sort(interval_indeces.begin(), interval_indeces.end(),
+        [this](unsigned i1, unsigned i2) {
+            const auto &A = lcpIntervals[i1], &B = lcpIntervals[i2];
+            if (!A) return false;
+            if (!B) return true;
+            return A->priority < B->priority; // ascending priority (your original)
+        });
+
+    // Process in reverse priority (largest first), safe reverse idiom
+    for (size_t idx = interval_indeces.size(); idx-- > 0; ) {
+        unsigned prio_index = interval_indeces[idx];
+        auto &opt = lcpIntervals[prio_index];
+        if (!opt) continue;
+
+        compression(k, *opt);   // pass by reference (no copy)
+        opt = std::nullopt;     // invalidate here (and in compression for the base)
     }
-    
-    unsigned prio_index;
-    lcp_interval curr_interval;
-    
-    unsigned empty = 0;
-
-    for (size_t i = interval_indeces.size() - 1; i > 0; i--)
-    {
-        // std::cout << "interval.size(): " << interval_indeces.size() << "\n";
-        if(lcpIntervals[interval_indeces[i]] == std::nullopt) 
-        {
-            interval_indeces.pop_back();    
-            empty++; 
-            continue;
-        }
-
-        prio_index = interval_indeces.back();
-        interval_indeces.pop_back();
-        // std::cout << "Interval Index: " << prio_index << ", Priority: " << lcpIntervals[prio_index] -> priority << "\n";
-        curr_interval = lcpIntervals[prio_index].value();
-        compression(k, curr_interval);
-
-    }
-
-    if(lcpIntervals[interval_indeces[0]] == std::nullopt) 
-    {
-            interval_indeces.pop_back();    
-            empty++; 
-    }
-
-    prio_index = interval_indeces.back();
-    interval_indeces.pop_back();
-        // std::cout << "Interval Index: " << prio_index << ", Priority: " << lcpIntervals[prio_index] -> priority << "\n";
-    curr_interval = lcpIntervals[prio_index].value();
-    compression(k, curr_interval);
-
 }
+
 
 
     
