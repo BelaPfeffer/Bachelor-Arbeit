@@ -22,43 +22,50 @@ void log(const std::string& msg) {
 }
 
 // Worker function for each k-value
+// Worker function for each k-value
+// Worker function for each k-value
 void buildCSAForK(const std::string& text, unsigned k, const std::string& dataset_name,
                   size_t sa_entries, size_t sa_bytes,
                   size_t& csa_bytes_out, size_t& csa_entries_out, 
-                  std::chrono::milliseconds& duration_out) {
-    
-    log("[k=" + std::to_string(k) + "] Starting CSA construction...\n");
-    
+                  std::chrono::milliseconds& duration_out,
+                  unsigned per_k_threads)  // threads assigned to this k
+{
+    log("[k=" + std::to_string(k) + "] Starting CSA construction with "
+        + std::to_string(per_k_threads) + " threads...\n");
+
     auto csa_start = std::chrono::high_resolution_clock::now();
-    compressedSA CSA(text, k);
+
+    // Build exactly once, in parallel inside compressedSA:
+    compressedSA CSA = compressedSA::compute_with_threads(text, k, per_k_threads);
+
     auto csa_end = std::chrono::high_resolution_clock::now();
     auto csa_duration = std::chrono::duration_cast<std::chrono::milliseconds>(csa_end - csa_start);
-    
-    size_t csa_bytes = CSA.memoryUsageBytes();
+
+    size_t csa_bytes   = CSA.memoryUsageBytes();
     size_t csa_entries = CSA.csasize();
-    
+
     // Save to disk
     std::string csa_filename = "indices/" + dataset_name + "_k" + std::to_string(k) + "_csa.bin";
     CSA.save(csa_filename);
     size_t csa_filesize = std::filesystem::file_size(csa_filename);
-    
-    // Calculate metrics
-    double compression_ratio = (double)sa_entries / csa_entries;
-    double memory_savings = (1.0 - (double)csa_bytes / sa_bytes) * 100.0;
-    double entry_reduction = (1.0 - (double)csa_entries / sa_entries) * 100.0;
-    
-    // Thread-safe logging
+
+    // Metrics (guard divisions)
+    double compression_ratio = (double)sa_entries / std::max<size_t>(1, csa_entries);
+    double memory_savings    = (1.0 - (double)csa_bytes / std::max<size_t>(1, sa_bytes)) * 100.0;
+    double entry_reduction   = (1.0 - (double)csa_entries / std::max<size_t>(1, sa_entries)) * 100.0;
+
     {
         std::lock_guard<std::mutex> lock(cout_mutex);
         std::cout << "\n";
         printSeparator();
         std::cout << "CSA CONSTRUCTION COMPLETE (k=" << k << ")\n";
         printSeparator();
+        std::cout << "Threads used:       " << per_k_threads << "\n";
         std::cout << "Construction time:  " << csa_duration.count() / 1000.0 << " seconds\n";
         std::cout << "Memory usage:       " << csa_bytes << " bytes (" 
                   << csa_bytes / (1024.0 * 1024.0) << " MB)\n";
         std::cout << "CSA entries:        " << csa_entries << "\n";
-        std::cout << "Bytes per entry:    " << (double)csa_bytes / csa_entries << "\n";
+        std::cout << "Bytes per entry:    " << (double)csa_bytes / std::max<size_t>(1, csa_entries) << "\n";
         std::cout << "File saved:         " << csa_filename << "\n";
         std::cout << "File size:          " << csa_filesize / (1024.0 * 1024.0) << " MB\n";
         std::cout << "\nCompression metrics:\n";
@@ -68,12 +75,14 @@ void buildCSAForK(const std::string& text, unsigned k, const std::string& datase
         std::cout << "  Memory savings:      " << memory_savings << "%\n";
         std::cout << std::endl;
     }
-    
-    // Set output parameters
-    csa_bytes_out = csa_bytes;
+
+    csa_bytes_out   = csa_bytes;
     csa_entries_out = csa_entries;
-    duration_out = csa_duration;
+    duration_out    = csa_duration;
 }
+
+    
+
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -192,30 +201,31 @@ int main(int argc, char** argv) {
     size_t k_idx = 0;
     
     while (k_idx < k_values.size()) {
-        // Launch batch of threads
-        size_t batch_size = std::min(num_threads, static_cast<unsigned>(k_values.size() - k_idx));
-        threads.clear();
-        
-        for (size_t i = 0; i < batch_size; ++i) {
-            size_t current_idx = k_idx + i;
-            threads.emplace_back(buildCSAForK, 
-                                std::cref(text), 
-                                k_values[current_idx], 
-                                std::cref(dataset_name),
-                                sa_entries, 
-                                sa_bytes,
-                                std::ref(csa_bytes_vec[current_idx]),
-                                std::ref(csa_entries_vec[current_idx]),
-                                std::ref(csa_durations[current_idx]));
-        }
-        
-        // Wait for batch to complete
-        for (auto& thread : threads) {
-            thread.join();
-        }
-        
-        k_idx += batch_size;
+    // how many k-jobs in this batch
+    size_t batch_size = std::min<unsigned>(num_threads, static_cast<unsigned>(k_values.size() - k_idx));
+    threads.clear();
+
+    // split the total thread budget across this batch
+    unsigned per_k_threads = std::max(1u, num_threads / static_cast<unsigned>(batch_size));
+
+    for (size_t i = 0; i < batch_size; ++i) {
+        size_t current_idx = k_idx + i;
+        threads.emplace_back(buildCSAForK, 
+                            std::cref(text), 
+                            k_values[current_idx], 
+                            std::cref(dataset_name),
+                            sa_entries, 
+                            sa_bytes,
+                            std::ref(csa_bytes_vec[current_idx]),
+                            std::ref(csa_entries_vec[current_idx]),
+                            std::ref(csa_durations[current_idx]),
+                            per_k_threads); // <-- NEW
     }
+
+    for (auto& thread : threads) thread.join();
+    k_idx += batch_size;
+    }
+
     
     auto parallel_end = std::chrono::high_resolution_clock::now();
     auto total_parallel_time = std::chrono::duration_cast<std::chrono::milliseconds>(parallel_end - parallel_start);

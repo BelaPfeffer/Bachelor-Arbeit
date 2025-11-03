@@ -5,9 +5,19 @@
 #include <numeric>
 #include <algorithm>
 #include <cmath>
-#include <iterator>  
+#include <iterator>
+#include <atomic>
+#include <thread>
+#include <mutex>
+
 
 #include <sdsl/suffix_array_algorithm.hpp>
+
+
+// pending metadata updates we apply after we append local buffer to global CSA
+
+
+
 
 uint64_t buildDollarMask(unsigned k) {
     uint64_t mask = 0;
@@ -461,6 +471,227 @@ compressedSA computeSA::exportSA () const
 {
    compressedSA e_csa (this -> hashMap, this -> CSA, this -> text);
     return e_csa;
+}
+
+// interval_state: 0=unclaimed, 1=claimed, 2=done
+void computeSA::compression_to_buffer(
+    const unsigned k,
+    unsigned owner_idx,
+    std::vector<std::atomic<uint8_t>>& interval_state,
+    std::vector<uint32_t>& local_csa,
+    std::vector<PendingSetValue>& setvals,
+    std::vector<PendingRefValue>& refvals)
+{
+    auto &opt = lcpIntervals[owner_idx];
+    if (!opt) return;
+    lcp_interval& interval = *opt;
+
+    if (interval.right < interval.left) { interval_state[owner_idx].store(2, std::memory_order_release); return; }
+
+    // Base pattern info
+    const unsigned pat_pos_index  = suffixArray[interval.min_index];
+    const unsigned pattern_length = lcpArray[interval.min_index];
+    const unsigned long base_occ_total = interval.right - interval.left + 1;
+
+    // 1) copy base interval SA entries into local buffer
+    const size_t base_local_start = local_csa.size();
+    local_csa.insert(local_csa.end(),
+        suffixArray.begin() + interval.left,
+        suffixArray.begin() + interval.right + 1);
+
+    // base kmer
+    uint64_t kmer = 0;
+    for (unsigned t = 0; t < k; ++t) kmer = (kmer << 3) | dna5_code(text[pat_pos_index + t]);
+    const uint64_t kmer_old = kmer;
+
+    // Delay setValue until we know global start; record pending
+    setvals.push_back(PendingSetValue{ kmer_old, base_local_start, base_occ_total });
+
+    // invalidate base interval in vector (owner does this)
+    lcpIntervals[owner_idx] = std::nullopt;
+    setBits(interval, 0);
+    interval_state[owner_idx].store(2, std::memory_order_release);
+
+    if (pattern_length <= k) return;
+
+    const uint64_t mask = buildDollarMask(k);
+
+    // 2) slide window
+    for (unsigned long i = pat_pos_index + 1; i <= pat_pos_index + pattern_length - k; ++i)
+    {
+        const uint64_t shift = i - pat_pos_index;
+        kmer = roll_kmer(kmer, dna5_code(text[i + k - 1]), k);
+        const uint64_t kmer_new = kmer;
+
+        if ((kmer_new & mask) != 0) continue;
+
+        auto it_new = hashMap.find(kmer_new);
+        if (it_new == hashMap.end()) continue;
+
+        const unsigned interval_index = it_new->second.lcp_interval_index;
+        if (interval_index >= lcpIntervals.size()) continue;
+
+        auto &opt_ref = lcpIntervals[interval_index];
+        if (!opt_ref) continue;
+
+        // if this points to the base's own interval, skip
+        if (interval_index == owner_idx) continue;
+
+        // size of referenced (disjoint) bucket
+        lcp_interval temp_interval = *opt_ref;
+        unsigned count = static_cast<unsigned>(temp_interval.right - temp_interval.left + 1);
+        if (count == 0) { opt_ref = std::nullopt; continue; }
+
+        unsigned long remaining_base = base_occ_total;
+        unsigned long x = 0, y = 0;
+
+        // ensure we only "finish" that interval if we can atomically mark it done
+        bool finished_ref = false;
+        {
+            uint8_t expected = 0;
+            if (interval_state[interval_index].compare_exchange_strong(expected, 2)) {
+                finished_ref = true;  // we took ownership to finalize it
+            } else if (expected == 2) {
+                // already done by someone else
+                continue;
+            } else {
+                // someone else is working on it; we won't modify its bits/optional
+            }
+        }
+
+        // two-pointer sweep; push extra elements to local buffer
+        while (count > remaining_base && remaining_base > 0) {
+            const auto pos_new = suffixArray[temp_interval.left + x];
+            const auto pos_old = suffixArray[interval.left + y];
+            if (pos_new != (pos_old + shift)) {
+                local_csa.push_back(pos_new);
+                setvals.push_back(PendingSetValue{ kmer_new, local_csa.size() - 1, 1 });
+                ++x; --count;
+                continue;
+            }
+            ++x; ++y; --count; --remaining_base;
+        }
+
+        if (remaining_base < count) {
+            while (count > 0) {
+                const auto pos_new = suffixArray[temp_interval.left + x];
+                local_csa.push_back(pos_new);
+                setvals.push_back(PendingSetValue{ kmer_new, local_csa.size() - 1, 1 });
+                ++x; --count;
+            }
+        }
+
+        // if we "own" the referenced interval, we can mark it fully done
+        if (finished_ref) {
+            setBits(temp_interval, 0);
+            opt_ref = std::nullopt;
+        }
+
+        // record reference metadata; base_csa_index will be known after append
+        if (kmer_new != kmer_old) {
+            refvals.push_back(PendingRefValue{
+                kmer_new,
+                static_cast<int>(shift),
+                base_occ_total,
+                base_local_start
+            });
+        }
+    }
+}
+
+void computeSA::runCompressionParallel(const unsigned k, unsigned num_threads)
+{
+    if (num_threads == 0) num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 1;
+
+    // indices sorted by priority (ascending → we’ll pop from the back)
+    std::vector<unsigned> interval_indeces(lcpIntervals.size());
+    std::iota(interval_indeces.begin(), interval_indeces.end(), 0);
+    std::sort(interval_indeces.begin(), interval_indeces.end(),
+        [this](unsigned i1, unsigned i2) {
+            const auto &A = lcpIntervals[i1], &B = lcpIntervals[i2];
+            if (!A) return false;
+            if (!B) return true;
+            return A->priority < B->priority;
+        });
+
+    // interval state: 0=unclaimed, 1=claimed (not used here), 2=done
+    std::vector<std::atomic<uint8_t>> interval_state(lcpIntervals.size());
+    for (auto &s : interval_state) s.store(0, std::memory_order_relaxed);
+
+    // atomic work cursor
+    std::atomic<size_t> next{ interval_indeces.size() };
+
+    // global append mutex for CSA and hashMap updates
+    std::mutex csa_mutex;
+    std::mutex hash_mutex;
+
+    // Pre-reserve CSA capacity (upper bound)
+    CSA.reserve(suffixArray.size());
+
+    auto worker = [&]() {
+        std::vector<uint32_t> local_csa;
+        std::vector<PendingSetValue> setvals;
+        std::vector<PendingRefValue> refvals;
+
+        while (true) {
+            size_t pos = next.fetch_sub(1, std::memory_order_relaxed);
+            if (pos == 0) break;
+            unsigned idx = interval_indeces[pos - 1];
+
+            // claim this base interval (if already done, skip)
+            uint8_t expected = 0;
+            if (!interval_state[idx].compare_exchange_strong(expected, 1)) {
+                continue; // someone else finished/claimed it
+            }
+
+            local_csa.clear();
+            setvals.clear();
+            refvals.clear();
+
+            // do the work into local buffer
+            compression_to_buffer(k, idx, interval_state, local_csa, setvals, refvals);
+
+            if (local_csa.empty()) {
+                // mark done if not already (compression_to_buffer may have set 2)
+                interval_state[idx].store(2, std::memory_order_release);
+                continue;
+            }
+
+            // bulk-append to global CSA and apply metadata updates
+            size_t global_start;
+            {
+                std::lock_guard<std::mutex> lk(csa_mutex);
+                global_start = CSA.size();
+                CSA.insert(CSA.end(), local_csa.begin(), local_csa.end());
+            }
+
+            // setValue for base + singletons
+            {
+                std::lock_guard<std::mutex> lk(hash_mutex);
+                for (const auto &p : setvals) {
+                    setValue(p.kmer, global_start + p.local_index, p.occurences);
+                }
+                // resolve ref metadata using base's global start
+                for (const auto &r : refvals) {
+                    setReferenceValue(r.kmer_new,
+                                      r.shift,
+                                      r.refOcc,
+                                      global_start + r.base_local_start,
+                                      true);
+                }
+            }
+
+            // ensure interval is marked done (owner responsibility)
+            interval_state[idx].store(2, std::memory_order_release);
+        }
+    };
+
+    // launch threads
+    std::vector<std::thread> pool;
+    pool.reserve(num_threads);
+    for (unsigned t = 0; t < num_threads; ++t) pool.emplace_back(worker);
+    for (auto &th : pool) th.join();
 }
 
 

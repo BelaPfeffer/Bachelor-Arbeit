@@ -30,11 +30,25 @@ struct lcp_interval
     lcp_interval() : left(0), right(0), min_index(0), priority(0) {}; // Default constructor
 };
 
+struct PendingSetValue {
+    uint64_t kmer;
+    size_t   local_index;   // index inside local_csa that will map to global after append
+    unsigned long occurences;
+};
+
+struct PendingRefValue {
+    uint64_t kmer_new;
+    int      shift;
+    unsigned long refOcc;
+    size_t   base_local_start; // local offset where base interval starts (usually 0)
+};
+
 
 class computeSA 
 {
 private:
     std::string text; // Originaltext
+
 
     csa_bitcompressed<> suffixArray;
 
@@ -51,6 +65,15 @@ private:
     std::vector<uint64_t> CSA;
 
     void initComputeSuffix(unsigned k);
+
+
+    void compression_to_buffer(
+        const unsigned k,
+        unsigned owner_idx,
+        std::vector<std::atomic<uint8_t>>& interval_state,
+        std::vector<uint32_t>& local_csa,
+        std::vector<PendingSetValue>& setvals,
+        std::vector<PendingRefValue>& refvals);
 
     void initLCPintervalsAndHashmap (const unsigned k);
 
@@ -81,6 +104,8 @@ public:
     }
 
     size_t memoryUsageBytes() const;
+
+    void runCompressionParallel(unsigned k, unsigned num_threads);
 
     unsigned calc_priority2(lcp_interval& interval) const;
     

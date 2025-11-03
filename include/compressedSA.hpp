@@ -15,6 +15,7 @@ private:
     std::string text;
 
 public:
+    static compressedSA compute_with_threads(const std::string& fastaData, unsigned k, unsigned threads);
     unsigned csasize() const { return CSA.size(); }
 
     void save(const std::string& filename) const;

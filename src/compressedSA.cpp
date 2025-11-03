@@ -125,6 +125,12 @@ compressedSA compressedSA::compute (const std::string& fastaData, const unsigned
     return e_csa;
 }
 
+compressedSA compressedSA::compute_with_threads(const std::string& s, unsigned k, unsigned threads) {
+    auto csa = std::make_unique<computeSA>(s, k);
+    csa->runCompressionParallel(k, threads);   // your interval-parallel engine
+    return csa->exportSA();
+}
+
   void compressedSA::save(const std::string& filename) const {
         std::ofstream out(filename, std::ios::binary);
         if (!out) {
