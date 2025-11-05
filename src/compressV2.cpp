@@ -5,7 +5,9 @@
 #include <numeric>
 #include <algorithm>
 #include <cmath>
-#include <iterator>  
+#include <iterator> 
+#include <iomanip> 
+#include <cmath>
 
 #include <sdsl/suffix_array_algorithm.hpp>
 
@@ -385,6 +387,24 @@ void computeSA::initLCPintervalsAndHashmap(const unsigned k)
 
         i = interval.right + 1;
     }
+
+    double averageMinLCP = avgMinLCP(lcpIntervals, lcpArray);
+    std::cout << "Average Minimum LCP across intervals: " << std::round(averageMinLCP) << "\n";
+}
+
+double computeSA::avgMinLCP(const std::vector<std::optional<lcp_interval>>& intervals, const sdsl::lcp_bitcompressed<>& lcpArray) {
+    uint64_t totalMinLCP = 0;
+    uint64_t count = 0;
+
+    for (const auto& optInterval : intervals) {
+        if (optInterval.has_value()) {
+            const lcp_interval& interval = optInterval.value();
+            totalMinLCP += lcpArray[interval.min_index];
+            ++count;
+        }
+    }
+
+    return (count > 0) ? static_cast<double>(totalMinLCP) / count : 0.0;
 }
 
 void computeSA::runCompression(const unsigned k)
@@ -462,5 +482,40 @@ compressedSA computeSA::exportSA () const
    compressedSA e_csa (this -> hashMap, this -> CSA, this -> text);
     return e_csa;
 }
+
+
+
+// Average over LCP[1..n-1]; use wide accumulator for safety
+long double computeSA::avgLCP() const {
+    auto n = lcpArray.size();
+    if (n <= 1) return 0.0L;
+
+    // Use 128-bit accumulator to be safe on massive inputs
+    unsigned __int128 acc = 0;
+
+    // sdsl::lcp_bitcompressed<> supports operator[] access
+    for (size_t i = 1; i < n; ++i) {
+        acc += static_cast<unsigned __int128>(lcpArray[i]);
+    }
+
+    // Convert to long double for the division/return
+    long double sum = static_cast<long double>(acc);
+    return sum / static_cast<long double>(n - 1);
+}
+
+void computeSA::printAvgLCP() const {
+    auto n = lcpArray.size();
+    long double avg = avgLCP();
+
+    std::cout << "======================================\n";
+    std::cout << "LCP STATISTICS\n";
+    std::cout << "--------------------------------------\n";
+    std::cout << "  Entries (excluding first): " << (n > 0 ? (n - 1) : 0) << "\n";
+    std::cout << "  Average LCP:               "
+              << std::fixed << std::setprecision(3)
+              << static_cast<double>(avg) << "\n";
+    std::cout << "======================================\n";
+}
+
 
 

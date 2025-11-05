@@ -90,7 +90,7 @@ std::vector<uint64_t> compressedSA::findPattern(std::string& kmer, unsigned k)
 
 
 
-size_t compressedSA::memoryUsageBytes() const {
+size_t compressedSA::memoryUsageBytes(MemoryResults& mRes) const {
     size_t totalMemory = 0;
     
     // Basis-Objektgröße (die Klasse selbst)
@@ -107,13 +107,18 @@ size_t compressedSA::memoryUsageBytes() const {
     totalMemory += textMEM;
     
     std::cout << "Hashmap MEM (approx): " << hashmapMEM << " bytes\n";
-    std::cout << "CSA size (approx): " << csaMEM << " bytes\n";
+    std::cout << "CSA size 8byte (approx): " << csaMEM << " bytes\n";
+    std::cout << "CSA size 4byte (approx): " << csaMEM / 2 << " bytes\n";
     std::cout << "Text size (approx): " << textMEM << " bytes\n";
+
+    mRes.setCSAData(csaMEM, hashmapMEM, CSA.size());
+
     return totalMemory;
 }
 
 compressedSA compressedSA::compute (const std::string& fastaData, const unsigned k) {
     std::unique_ptr<computeSA> csa = std::make_unique<computeSA>(fastaData, k);
+    csa -> printAvgLCP();
     // csa -> printSuffixArray();
     // csa -> printIntervals(k);
     csa -> runCompression(k);
@@ -154,8 +159,7 @@ compressedSA compressedSA::compute (const std::string& fastaData, const unsigned
         }
         
         out.close();
-        std::cout << "Saved compressedSA to " << filename << " (" 
-                  << memoryUsageBytes() << " bytes)\n";
+        std::cout << "Saved compressedSA to " << filename << "\n";
     }
     
     // NEW: Load from disk

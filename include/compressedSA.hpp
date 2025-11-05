@@ -1,11 +1,13 @@
 #pragma once
 
 #include "hashValue.hpp"
+#include "results.hpp"
 #include "compressV2.hpp"
 #include <unordered_map>
 #include <vector>
 #include <string>
 #include <iostream>
+
 
 class compressedSA
 {   
@@ -43,7 +45,7 @@ public:
     std::string decode_dna5(uint64_t encoded, unsigned k);
     std::vector<uint64_t> findPattern(std::string& kmer, unsigned k);
     static compressedSA compute (const std::string& fastaData, const unsigned k);
-    size_t memoryUsageBytes() const;
+    size_t memoryUsageBytes(MemoryResults& mRes) const;
 
 
 

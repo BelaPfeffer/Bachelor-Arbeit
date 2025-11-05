@@ -1,6 +1,7 @@
 #include "compressedSA.hpp"
 #include "suffix_array.hpp"
 #include "fastaParser.hpp"
+#include "results.hpp"
 #include <iostream>
 #include <filesystem>
 #include <chrono>
@@ -23,8 +24,8 @@ void log(const std::string& msg) {
 
 // Worker function for each k-value
 void buildCSAForK(const std::string& text, unsigned k, const std::string& dataset_name,
-                  size_t sa_entries, size_t sa_bytes,
-                  size_t& csa_bytes_out, size_t& csa_entries_out, 
+                  const MemoryResults& sa_result,
+                  MemoryResults& csa_result,
                   std::chrono::milliseconds& duration_out) {
     
     log("[k=" + std::to_string(k) + "] Starting CSA construction...\n");
@@ -34,8 +35,13 @@ void buildCSAForK(const std::string& text, unsigned k, const std::string& datase
     auto csa_end = std::chrono::high_resolution_clock::now();
     auto csa_duration = std::chrono::duration_cast<std::chrono::milliseconds>(csa_end - csa_start);
     
-    size_t csa_bytes = CSA.memoryUsageBytes();
-    size_t csa_entries = CSA.csasize();
+    // Set metadata
+    csa_result.datasetName = dataset_name;
+    csa_result.k = k;
+    csa_result.numSAEntries = sa_result.numSAEntries;
+    
+    // Get CSA memory usage via setter method
+    CSA.memoryUsageBytes(csa_result);
     
     // Save to disk
     std::string csa_filename = "indices/" + dataset_name + "_k" + std::to_string(k) + "_csa.bin";
@@ -43,9 +49,9 @@ void buildCSAForK(const std::string& text, unsigned k, const std::string& datase
     size_t csa_filesize = std::filesystem::file_size(csa_filename);
     
     // Calculate metrics
-    double compression_ratio = (double)sa_entries / csa_entries;
-    double memory_savings = (1.0 - (double)csa_bytes / sa_bytes) * 100.0;
-    double entry_reduction = (1.0 - (double)csa_entries / sa_entries) * 100.0;
+    double compression_ratio = (double)sa_result.numSAEntries / csa_result.numCSAEntries;
+    double memory_savings = (1.0 - (double)csa_result.csaMemRaw / sa_result.saMemRaw) * 100.0;
+    double entry_reduction = (1.0 - (double)csa_result.numCSAEntries / sa_result.numSAEntries) * 100.0;
     
     // Thread-safe logging
     {
@@ -55,10 +61,10 @@ void buildCSAForK(const std::string& text, unsigned k, const std::string& datase
         std::cout << "CSA CONSTRUCTION COMPLETE (k=" << k << ")\n";
         printSeparator();
         std::cout << "Construction time:  " << csa_duration.count() / 1000.0 << " seconds\n";
-        std::cout << "Memory usage:       " << csa_bytes << " bytes (" 
-                  << csa_bytes / (1024.0 * 1024.0) << " MB)\n";
-        std::cout << "CSA entries:        " << csa_entries << "\n";
-        std::cout << "Bytes per entry:    " << (double)csa_bytes / csa_entries << "\n";
+        std::cout << "Memory usage:       " << csa_result.csaMemRaw << " bytes (" 
+                  << csa_result.mbCSA() << " MB)\n";
+        std::cout << "CSA entries:        " << csa_result.numCSAEntries << "\n";
+        std::cout << "Bytes per entry:    " << (double)csa_result.csaMemRaw / csa_result.numCSAEntries << "\n";
         std::cout << "File saved:         " << csa_filename << "\n";
         std::cout << "File size:          " << csa_filesize / (1024.0 * 1024.0) << " MB\n";
         std::cout << "\nCompression metrics:\n";
@@ -69,9 +75,6 @@ void buildCSAForK(const std::string& text, unsigned k, const std::string& datase
         std::cout << std::endl;
     }
     
-    // Set output parameters
-    csa_bytes_out = csa_bytes;
-    csa_entries_out = csa_entries;
     duration_out = csa_duration;
 }
 
@@ -139,8 +142,8 @@ int main(int argc, char** argv) {
     // Check if SA already exists for this dataset
     std::string sa_filename = "indices/" + dataset_name + "_sa.bin";
     SuffixArray SA(text);
-    size_t sa_bytes = 0;
-    size_t sa_entries = 0;
+    MemoryResults sa_result;
+    sa_result.datasetName = dataset_name;
     auto sa_duration = std::chrono::milliseconds(0);
     
     if (std::filesystem::exists(sa_filename)) {
@@ -164,14 +167,14 @@ int main(int argc, char** argv) {
         SA.save(sa_filename);
     }
     
-    sa_bytes = SA.memoryUsageBytes();
-    sa_entries = SA.getSuffixArray().size();
+    // Get SA memory usage via setter
+    SA.memoryUsageBytes(sa_result);
     size_t sa_filesize = std::filesystem::file_size(sa_filename);
     
-    std::cout << "Memory usage:       " << sa_bytes << " bytes (" 
-              << sa_bytes / (1024.0 * 1024.0) << " MB)\n";
-    std::cout << "SA entries:         " << sa_entries << "\n";
-    std::cout << "Bytes per entry:    " << (double)sa_bytes / sa_entries << "\n";
+    std::cout << "Memory usage:       " << sa_result.saMemRaw << " bytes (" 
+              << sa_result.saMemRaw / (1024.0 * 1024.0) << " MB)\n";
+    std::cout << "SA entries:         " << sa_result.numSAEntries << "\n";
+    std::cout << "Bytes per entry:    " << (double)sa_result.saMemRaw / sa_result.numSAEntries << "\n";
     std::cout << "File size:          " << sa_filesize / (1024.0 * 1024.0) << " MB\n\n";
 
     // ===== Build Compressed Suffix Arrays in Parallel =====
@@ -182,9 +185,8 @@ int main(int argc, char** argv) {
     
     auto parallel_start = std::chrono::high_resolution_clock::now();
     
-    // Storage for results
-    std::vector<size_t> csa_bytes_vec(k_values.size());
-    std::vector<size_t> csa_entries_vec(k_values.size());
+    // Storage for results - initialize each with a copy of sa_result
+    std::vector<MemoryResults> csa_results(k_values.size(), sa_result);
     std::vector<std::chrono::milliseconds> csa_durations(k_values.size());
     
     // Launch threads in batches to respect thread limit
@@ -202,10 +204,8 @@ int main(int argc, char** argv) {
                                 std::cref(text), 
                                 k_values[current_idx], 
                                 std::cref(dataset_name),
-                                sa_entries, 
-                                sa_bytes,
-                                std::ref(csa_bytes_vec[current_idx]),
-                                std::ref(csa_entries_vec[current_idx]),
+                                std::cref(sa_result),
+                                std::ref(csa_results[current_idx]),
                                 std::ref(csa_durations[current_idx]));
         }
         
@@ -229,8 +229,8 @@ int main(int argc, char** argv) {
     
     std::cout << "\nDataset: " << dataset_name << "\n";
     std::cout << "Text size: " << text.size() << " bp\n";
-    std::cout << "SA entries: " << sa_entries << "\n";
-    std::cout << "SA memory: " << sa_bytes / (1024.0 * 1024.0) << " MB\n";
+    std::cout << "SA entries: " << sa_result.numSAEntries << "\n";
+    std::cout << "SA memory: " << sa_result.saMemRaw / (1024.0 * 1024.0) << " MB\n";
     std::cout << "Total parallel construction time: " << total_parallel_time.count() / 1000.0 << " seconds\n\n";
     
     std::cout << std::left << std::setw(6) << "k" 
@@ -243,16 +243,15 @@ int main(int argc, char** argv) {
     
     for (size_t i = 0; i < k_values.size(); ++i) {
         unsigned k = k_values[i];
-        size_t csa_bytes = csa_bytes_vec[i];
-        size_t csa_entries = csa_entries_vec[i];
+        const auto& csa_result = csa_results[i];
         auto csa_duration = csa_durations[i];
         
-        double compression_ratio = (double)sa_entries / csa_entries;
-        double reduction_pct = (1.0 - (double)csa_entries / sa_entries) * 100.0;
+        double compression_ratio = (double)sa_result.numSAEntries / csa_result.numCSAEntries;
+        double reduction_pct = (1.0 - (double)csa_result.numCSAEntries / sa_result.numSAEntries) * 100.0;
         
         std::cout << std::left << std::setw(6) << k
-                  << std::right << std::setw(12) << csa_entries
-                  << std::setw(12) << (csa_bytes / (1024.0 * 1024.0))
+                  << std::right << std::setw(12) << csa_result.numCSAEntries
+                  << std::setw(12) << csa_result.mbCSA()
                   << std::setw(12) << compression_ratio
                   << std::setw(12) << reduction_pct
                   << std::setw(12) << (csa_duration.count() / 1000.0) << "\n";
@@ -264,11 +263,7 @@ int main(int argc, char** argv) {
     // Output LaTeX table rows
     std::cout << "LaTeX table rows:\n";
     for (size_t i = 0; i < k_values.size(); ++i) {
-        std::cout << dataset_name << " & " << k_values[i] << " & "
-                  << sa_bytes / (1024.0 * 1024.0) << " & "
-                  << csa_bytes_vec[i] / (1024.0 * 1024.0) << " & "
-                  << sa_entries / 1e6 << " & "
-                  << csa_entries_vec[i] / 1e6 << " \\\\\n";
+        csa_results[i].printLatexRow();
     }
 
     return 0;

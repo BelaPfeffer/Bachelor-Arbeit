@@ -1,6 +1,6 @@
 #ifndef SUFFIXARRAY_H
 #define SUFFIXARRAY_H
-
+#include "results.hpp"
 #include <string>
 #include <vector>
 #include <cstdint>          // for uint64_t
@@ -15,7 +15,7 @@ public:
     ~SuffixArray() = default;
 
     // Introspection / stats
-    virtual size_t memoryUsageBytes() const;
+    virtual size_t memoryUsageBytes(MemoryResults& mRes) const;
 
     // Accessors
     const std::vector<uint64_t>& getSuffixArray() const;

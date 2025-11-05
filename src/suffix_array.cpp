@@ -26,7 +26,7 @@ void SuffixArray::buildSuffixArray() {
 }
 
 // Approx memory usage of the object and its dynamic buffers
-size_t SuffixArray::memoryUsageBytes() const {
+size_t SuffixArray::memoryUsageBytes(MemoryResults& mRes) const {
     size_t totalMemory = 0;
 
     // Base object size (the class itself)
@@ -47,8 +47,11 @@ size_t SuffixArray::memoryUsageBytes() const {
     // Verbose breakdown (approximate, ignores allocator/metadata overhead)
     std::cout << "Object size (approx): " << sizeof(*this) << " bytes\n";
     std::cout << "Text capacity (approx): " << textMEM << " bytes\n";
-    std::cout << "SA capacity (approx): " << saMEM << " bytes\n";
+    std::cout << "SA capacity 8 byte (approx): " << saMEM << " bytes\n";
+    std::cout << "SA capacity 4 byte (approx): " << saMEM / 2 << " bytes\n";
     std::cout << "LCP capacity (approx): " << lcpMEM << " bytes\n";
+
+    mRes.setSAData(saMEM, lcpMEM, suffixArray.size());
 
     return totalMemory;
 }

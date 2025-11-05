@@ -34,6 +34,7 @@ struct lcp_interval
 class computeSA 
 {
 private:
+
     std::string text; // Originaltext
 
     csa_bitcompressed<> suffixArray;
@@ -52,6 +53,8 @@ private:
 
     void initComputeSuffix(unsigned k);
 
+    double avgMinLCP(const std::vector<std::optional<lcp_interval>>& intervals, const sdsl::lcp_bitcompressed<>& lcpArray);
+
     void initLCPintervalsAndHashmap (const unsigned k);
 
     void initHash(const uint64_t& kmere, unsigned long lcp_interval_index);
@@ -65,6 +68,16 @@ private:
 
 
 public:
+    // Average LCP over LCP[1..n-1] (skipping LCP[0])
+    long double avgLCP() const;
+
+// Pretty printer for logs
+    void printAvgLCP() const;
+
+// (Optional) return by const-ref to avoid copying the compressed LCP structure
+    const lcp_bitcompressed<>& lcp() const { return lcpArray; }
+
+
     void setBits(lcp_interval& iv, bool bitVal);
 
     void printMap(uint64_t k);

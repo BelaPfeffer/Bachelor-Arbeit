@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
     try {
         g_state.SA = std::make_unique<SuffixArray>(SuffixArray::load(sa_file));
         std::cout << "  Entries: " << g_state.SA->getSuffixArray().size() << "\n";
-        std::cout << "  Memory:  " << g_state.SA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
+        // std::cout << "  Memory:  " << g_state.SA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
     } catch (...) {
         std::cerr << "ERROR loading SA\n";
         return 1;
@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
     try {
         g_state.CSA = std::make_unique<compressedSA>(compressedSA::load(csa_file));
         std::cout << "  Entries: " << g_state.CSA->csasize() << "\n";
-        std::cout << "  Memory:  " << g_state.CSA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
+        // std::cout << "  Memory:  " << g_state.CSA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
     } catch (...) {
         std::cerr << "ERROR loading CSA\n";
         return 1;
