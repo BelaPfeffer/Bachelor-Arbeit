@@ -1,10 +1,12 @@
 #ifndef MEMORY_RESULTS_HPP
 #define MEMORY_RESULTS_HPP
-
+#pragma once
+#include <sstream>
 #include <string>
 #include <cstdint>
 #include <iostream>
 #include <iomanip>
+
 
 struct MemoryResults {
     // Metadata
@@ -116,5 +118,46 @@ struct MemoryResults {
             << " \\\\" << std::endl;
     }
 };
+
+
+
+struct LookupResult {
+    // === Metadata ===
+    std::string dataset;  // e.g. "Human", "Cod"
+    uint32_t k;           // k-mer size
+
+    // === Lookup performance (in nanoseconds) ===
+    double meanSaNs;      // Mean lookup time for SA
+    double meanCsaNs;     // Mean lookup time for CSA + Hashmap
+    double medianSaNs;    // (optional) Median lookup time for SA
+    double medianCsaNs;   // (optional) Median lookup time for CSA
+
+    // === Derived metrics ===
+    double slowdown;      // CSA / SA (mean)
+    double speedup;       // SA / CSA (if you want the inverse)
+
+    // === Constructor ===
+    LookupResult(std::string dataset_, uint32_t k_,
+                 double meanSaNs_, double meanCsaNs_,
+                 double medianSaNs_ = 0, double medianCsaNs_ = 0)
+        : dataset(std::move(dataset_)), k(k_),
+          meanSaNs(meanSaNs_), meanCsaNs(meanCsaNs_),
+          medianSaNs(medianSaNs_), medianCsaNs(medianCsaNs_)
+    {
+        slowdown = (meanSaNs > 0) ? (meanCsaNs / meanSaNs) : 0.0;
+        speedup = (meanCsaNs > 0) ? (meanSaNs / meanCsaNs) : 0.0;
+    }
+
+    // === Helper: print as LaTeX table row (optional) ===
+    std::string toLatexRow() const {
+        std::ostringstream ss;
+        ss << std::fixed << std::setprecision(2);
+        ss << " & " << k << " & "
+           << meanSaNs << " & " << meanCsaNs << " & "
+           << slowdown << " \\\\";
+        return ss.str();
+    }
+};
+
 
 #endif // MEMORY_RESULTS_HPP

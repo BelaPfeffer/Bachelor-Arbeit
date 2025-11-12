@@ -20,6 +20,9 @@ target_link_libraries(benchmark_script
     benchmark::benchmark_main
 )
 
+# --- Threads support (for std::thread, std::mutex, etc.)
+find_package(Threads REQUIRED)
+
 # --- NEW: Construction Executable (no benchmark dependency) ---
 add_executable(construct_indices construct_indices.cpp)
 target_link_libraries(construct_indices
@@ -32,6 +35,26 @@ target_link_libraries(construct_indices
 add_executable(benchmark_queries benchmark_queries.cpp)
 target_link_libraries(benchmark_queries
   PRIVATE
+    compressionTools
+    seqan3::seqan3
+    benchmark::benchmark
+)
+
+# --- NEW: Query Benchmark Executable ---
+add_executable(construct_sada construct_sada.cpp)
+target_link_libraries(construct_sada
+  PRIVATE
+
+    compressionTools
+    seqan3::seqan3
+    benchmark::benchmark
+)
+
+# --- NEW: Query Benchmark Executable ---
+add_executable(query_sada query_sada.cpp)
+target_link_libraries(query_sada
+  PRIVATE
+
     compressionTools
     seqan3::seqan3
     benchmark::benchmark

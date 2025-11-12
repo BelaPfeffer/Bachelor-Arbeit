@@ -389,21 +389,24 @@ void computeSA::initLCPintervalsAndHashmap(const unsigned k)
     }
 
     double averageMinLCP = avgMinLCP(lcpIntervals, lcpArray);
-    std::cout << "Average Minimum LCP across intervals: " << std::round(averageMinLCP) << "\n";
+    std::cout << "Average Minimum LCP across intervals for k = " << k << ": " << std::round(averageMinLCP) << "\n";
 }
 
 double computeSA::avgMinLCP(const std::vector<std::optional<lcp_interval>>& intervals, const sdsl::lcp_bitcompressed<>& lcpArray) {
     uint64_t totalMinLCP = 0;
     uint64_t count = 0;
+    uint64_t unique = 0;
 
     for (const auto& optInterval : intervals) {
         if (optInterval.has_value()) {
+            if (optInterval -> right - optInterval -> left == 0) { unique++; continue; } // Skip intervals with only one suffix
             const lcp_interval& interval = optInterval.value();
             totalMinLCP += lcpArray[interval.min_index];
             ++count;
         }
     }
-
+    std::cout << "Unique intervals (only one suffix): " << unique << "\n";
+    std::cout << "ratio unique/total intervals: " << std::fixed << std::setprecision(4) << (static_cast<double>(unique) / (unique + count)) * 100.0 << "%\n";
     return (count > 0) ? static_cast<double>(totalMinLCP) / count : 0.0;
 }
 

@@ -11,18 +11,10 @@
 #include <memory>
 #include <chrono>
 #include <iostream>
+#include <future>    // std::future, std::async, std::launch
+#include <sstream>   // parse_k_list
 
-// -----------------------------
-// Global state
-// -----------------------------
-struct GlobalState {
-    std::unique_ptr<SuffixArray> SA;
-    std::unique_ptr<compressedSA> CSA;
-    std::vector<std::string> queries;
-    unsigned k = 0;
-    unsigned reps = 3;
-    std::string dataset_name;
-} g_state;
+
 
 // -----------------------------
 // Small helpers
@@ -55,109 +47,84 @@ static double percentile(std::vector<double> v, double p) {
     return v[idx];
 }
 
-int main(int argc, char** argv) {
-    // Usage: prog <dataset_name> <k> <reps> [num_queries=100] [--shuffle]
-    bool shuffle_q = false;
-
-    // Strip shuffle flag if present
-    {
-        int w = 1;
-        for (int r = 1; r < argc; ++r) {
-            if (std::string(argv[r]) == "--shuffle") {
-                shuffle_q = true;
-                continue;
-            }
-            argv[w++] = argv[r];
+// Parse k-list like: "1,2,4-6,10"
+static std::vector<unsigned> parse_k_list(const std::string& s) {
+    std::vector<unsigned> out;
+    std::string token;
+    std::stringstream ss(s);
+    while (std::getline(ss, token, ',')) {
+        // trim spaces
+        token.erase(0, token.find_first_not_of(" \t"));
+        if (token.empty()) continue;
+        token.erase(token.find_last_not_of(" \t") + 1);
+        auto dash = token.find('-');
+        if (dash == std::string::npos) {
+            unsigned v = static_cast<unsigned>(std::stoul(token));
+            out.push_back(v);
+        } else {
+            std::string a_str = token.substr(0, dash);
+            std::string b_str = token.substr(dash + 1);
+            // trim
+            a_str.erase(0, a_str.find_first_not_of(" \t"));
+            a_str.erase(a_str.find_last_not_of(" \t") + 1);
+            b_str.erase(0, b_str.find_first_not_of(" \t"));
+            b_str.erase(b_str.find_last_not_of(" \t") + 1);
+            if (a_str.empty() || b_str.empty())
+                throw std::invalid_argument("empty bound in range: '" + token + "'");
+            unsigned a = static_cast<unsigned>(std::stoul(a_str));
+            unsigned b = static_cast<unsigned>(std::stoul(b_str));
+            if (a > b) std::swap(a, b);
+            for (unsigned v = a; v <= b; ++v) out.push_back(v);
         }
-        argc = w;
     }
+    if (out.empty()) throw std::invalid_argument("empty k_list");
+    return out;
+}
 
-    if (argc < 4) {
-        std::fprintf(stderr, "Usage: %s <dataset_name> <k> <reps> [num_queries=100] [--shuffle]\n", argv[0]);
-        return 1;
-    }
-
-    g_state.dataset_name = argv[1];
-    g_state.k = static_cast<unsigned>(std::stoul(argv[2]));
-    g_state.reps = static_cast<unsigned>(std::stoul(argv[3]));
-    size_t num_queries = (argc >= 5) ? static_cast<size_t>(std::stoul(argv[4])) : 100;
-
-    printSeparator();
-    std::cout << "QUERY BENCHMARK SETUP\n";
-    printSeparator();
-    std::cout << "Dataset:      " << g_state.dataset_name << "\n";
-    std::cout << "k-mer length: " << g_state.k << "\n";
-    std::cout << "Reps/query:   " << g_state.reps << "\n";
-    std::cout << "Num queries:  " << num_queries << "\n";
-    std::cout << "Random seed:  123456789\n";
-    std::cout << "Shuffle:      " << (shuffle_q ? "yes" : "no") << "\n\n";
-
-    // Filenames
-    std::string sa_file  = "indices/" + g_state.dataset_name + "_sa.bin";
-    std::string csa_file = "indices/" + g_state.dataset_name + "_k" + std::to_string(g_state.k) + "_csa.bin";
-
-    // Load SA
-    std::cout << "Loading SA from " << sa_file << "...\n";
-    try {
-        g_state.SA = std::make_unique<SuffixArray>(SuffixArray::load(sa_file));
-        std::cout << "  Entries: " << g_state.SA->getSuffixArray().size() << "\n";
-        // std::cout << "  Memory:  " << g_state.SA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
-    } catch (...) {
-        std::cerr << "ERROR loading SA\n";
-        return 1;
-    }
-
-    // Load CSA
-    std::cout << "Loading CSA from " << csa_file << "...\n";
-    try {
-        g_state.CSA = std::make_unique<compressedSA>(compressedSA::load(csa_file));
-        std::cout << "  Entries: " << g_state.CSA->csasize() << "\n";
-        // std::cout << "  Memory:  " << g_state.CSA->memoryUsageBytes() / (1024.0 * 1024.0) << " MB\n";
-    } catch (...) {
-        std::cerr << "ERROR loading CSA\n";
-        return 1;
-    }
-
-    // Generate queries
-    std::cout << "\nSampling " << num_queries << " random k-mers...\n";
-    g_state.queries = findRandQueries(g_state.SA->getText(), g_state.k, num_queries);
-
-    if (shuffle_q) {
-        std::mt19937_64 rng(123456789);
-        std::shuffle(g_state.queries.begin(), g_state.queries.end(), rng);
-    }
-
+// -----------------------------
+// Core worker: run one k (returns LookupResult)
+// - Loads CSA for that k
+// - Samples queries, measures SA/CSA in *nanoseconds*
+// -----------------------------
+static LookupResult run_one_k(const std::string& dataset_name,
+                              const SuffixArray& SA,
+                              unsigned k,
+                              unsigned reps,
+                              size_t num_queries,
+                              bool shuffle_q) {
     using clock_t = std::chrono::steady_clock;
 
-// Aggregatoren: direkt auf Größe setzen (nicht nur reserve),
-// damit wir pro Query auf den Index akkumulieren können.
-    std::vector<double> sa_times(num_queries, 0.0);
-    std::vector<double> csa_times(num_queries, 0.0);
+    // Load CSA specific to this k
+    const std::string csa_file = "indices/" + dataset_name + "_k" + std::to_string(k) + "_csa.bin";
+    auto CSA = std::make_unique<compressedSA>(compressedSA::load(csa_file));
+
+    // Generate queries for this k
+    std::vector<std::string> queries = findRandQueries(SA.getText(), k, num_queries);
+    if (shuffle_q) {
+        std::mt19937_64 rng(123456789);
+        std::shuffle(queries.begin(), queries.end(), rng);
+    }
+
+    // Pre-allocate per-query accumulators (nanoseconds, averaged across reps)
+    std::vector<double> sa_times_ns(num_queries, 0.0);
+    std::vector<double> csa_times_ns(num_queries, 0.0);
     std::vector<size_t> sa_occurs(num_queries, 0);
     std::vector<size_t> csa_occurs(num_queries, 0);
 
-    printSeparator();
-    std::cout << "MEASURING PER-QUERY TIMES (μs, averaged)\n";
-    printSeparator();
-
-    // Warmup (mutabler String für CSA, falls API non-const)
-    for (const auto& q : g_state.queries) {
-        (void)g_state.SA->search(q);
+    // Warmup
+    for (const auto& q : queries) {
+        (void)SA.search(q);
         std::string qm = q;
-        (void)g_state.CSA->findPattern(qm, g_state.k);
+        (void)CSA->findPattern(qm, k);
     }
 
-    const int R = static_cast<int>(g_state.reps);
+    const int R = static_cast<int>(reps);
 
-    // Hilfsfunktion für gemessene Zeit (µs)
-    auto dur_us = [](clock_t::time_point a, clock_t::time_point b){
+    auto dur_ns = [](clock_t::time_point a, clock_t::time_point b) {
         return std::chrono::duration<double, std::micro>(b - a).count();
     };
 
-    // Drei (oder R) Pässe über die GESAMTE Query-Menge, jeweils anderer Shuffle.
-    // Cross-over: in geraden Pässen SA→CSA, in ungeraden CSA→SA.
     for (int r = 0; r < R; ++r) {
-        // deterministisches Shuffling pro Pass
         std::vector<size_t> order(num_queries);
         std::iota(order.begin(), order.end(), size_t{0});
         std::mt19937_64 rng(static_cast<uint64_t>(123456789) + static_cast<uint64_t>(r));
@@ -167,23 +134,23 @@ int main(int argc, char** argv) {
 
         for (size_t idx = 0; idx < num_queries; ++idx) {
             size_t i = order[idx];
-            const auto& q = g_state.queries[i];
+            const auto& q = queries[i];
 
-            auto measure_sa = [&] () -> double {
+            auto measure_sa = [&]() -> double {
                 auto t0 = clock_t::now();
-                auto res = g_state.SA->search(q);
+                auto res = SA.search(q);
                 auto t1 = clock_t::now();
-                if (r == 0) sa_occurs[i] = res.size(); // einmal pro Query erfassen
-                return dur_us(t0, t1);
+                if (r == 0) sa_occurs[i] = res.size();
+                return dur_ns(t0, t1);
             };
 
-            auto measure_csa = [&] () -> double {
-                std::string q_mut = q; // falls API mutiert
+            auto measure_csa = [&]() -> double {
+                std::string q_mut = q;
                 auto t0 = clock_t::now();
-                auto res = g_state.CSA->findPattern(q_mut, g_state.k);
+                auto res = CSA->findPattern(q_mut, k);
                 auto t1 = clock_t::now();
                 if (r == 0) csa_occurs[i] = res.size();
-                return dur_us(t0, t1);
+                return dur_ns(t0, t1);
             };
 
             double dt_sa = 0.0, dt_csa = 0.0;
@@ -195,63 +162,116 @@ int main(int argc, char** argv) {
                 dt_sa  = measure_sa();
             }
 
-            // Über R-Pässe gemittelten Wert akkumulieren
-            sa_times[i]  += dt_sa  / R;
-            csa_times[i] += dt_csa / R;
+            sa_times_ns[i]  += dt_sa  / R;
+            csa_times_ns[i] += dt_csa / R;
 
-            // Korrektheitscheck nur im ersten Pass (spart Arbeit)
             if (r == 0 && sa_occurs[i] != csa_occurs[i]) {
-                std::cerr << "WARNING: Query " << i << " (" << q
-                        << ") mismatch: SA=" << sa_occurs[i]
-                        << " CSA=" << csa_occurs[i] << "\n";
+                std::cerr << "WARNING: k=" << k << " query " << i << " (" << q
+                          << ") mismatch: SA=" << sa_occurs[i]
+                          << " CSA=" << csa_occurs[i] << "\n";
             }
         }
     }
 
+    // Build LookupResult with means & medians (ns)
+    double mean_sa   = mean(sa_times_ns);
+    double mean_csa  = mean(csa_times_ns);
+    double median_sa = percentile(sa_times_ns, 0.5);
+    double median_csa= percentile(csa_times_ns, 0.5);
 
-    // Summary
-    printSeparator();
-    std::cout << "SUMMARY (μs/query)\n";
-    printSeparator();
-    std::cout << std::fixed << std::setprecision(3);
+    return LookupResult(dataset_name, static_cast<uint32_t>(k),
+                        mean_sa, mean_csa, median_sa, median_csa);
+}
 
-    std::cout << "\nSA\n";
-    std::cout << "Mean:   " << mean(sa_times) << " μs\n";
-    std::cout << "StdDev: " << stddev(sa_times) << " μs\n";
-    std::cout << "Median: " << percentile(sa_times, 0.5) << " μs\n";
-    std::cout << "P95:    " << percentile(sa_times, 0.95) << " μs\n";
-    std::cout << "P99:    " << percentile(sa_times, 0.99) << " μs\n";
-    std::cout << "Min:    " << *std::min_element(sa_times.begin(), sa_times.end()) << " μs\n";
-    std::cout << "Max:    " << *std::max_element(sa_times.begin(), sa_times.end()) << " μs\n";
+// -----------------------------
+// main: multi-k parallel wrapper
+// Usage:
+//   prog <dataset_name> <k_list> <reps> [num_queries=100] [--shuffle]
+// Example:
+//   prog Human "8,10,12-16" 3 200 --shuffle
+// -----------------------------
+int main(int argc, char** argv) {
+    bool shuffle_q = false;
 
-    std::cout << "\nCSA\n";
-    std::cout << "Mean:   " << mean(csa_times) << " μs\n";
-    std::cout << "StdDev: " << stddev(csa_times) << " μs\n";
-    std::cout << "Median: " << percentile(csa_times, 0.5) << " μs\n";
-    std::cout << "P95:    " << percentile(csa_times, 0.95) << " μs\n";
-    std::cout << "P99:    " << percentile(csa_times, 0.99) << " μs\n";
-    std::cout << "Min:    " << *std::min_element(csa_times.begin(), csa_times.end()) << " μs\n";
-    std::cout << "Max:    " << *std::max_element(csa_times.begin(), csa_times.end()) << " μs\n";
-
-    std::cout << "\nSlowdown (mean): "
-              << mean(csa_times) / mean(sa_times) << "x\n";
-
-    // CSV export (write SA occurrences; CSA occurrences can be added if you want both)
-    std::string csv_file = "results_" + g_state.dataset_name
-                           + "_k" + std::to_string(g_state.k) + ".csv";
-    std::ofstream csv(csv_file);
-    csv << "query_idx,query,sa_time_us,csa_time_us,occurrences\n";
-    for (size_t i = 0; i < num_queries; ++i) {
-        csv << i << "," << g_state.queries[i] << ","
-            << sa_times[i] << "," << csa_times[i] << ","
-            << sa_occurs[i] << "\n";
+    // Strip --shuffle flag
+    {
+        int w = 1;
+        for (int r = 1; r < argc; ++r) {
+            if (std::string(argv[r]) == "--shuffle") { shuffle_q = true; continue; }
+            argv[w++] = argv[r];
+        }
+        argc = w;
     }
-    csv.close();
-    std::cout << "\nSaved: " << csv_file << "\n";
 
+    if (argc < 4) {
+        std::fprintf(stderr,
+            "Usage: %s <dataset_name> <k_list> <reps> [num_queries=100] [--shuffle]\n",
+            argv[0]);
+        return 1;
+    }
+
+    const std::string dataset_name = argv[1];
+    const std::string k_list_str   = argv[2];
+    const unsigned reps            = static_cast<unsigned>(std::stoul(argv[3]));
+    const size_t num_queries       = (argc >= 5) ? static_cast<size_t>(std::stoul(argv[4])) : 100;
+
+    // Parse k list
+    std::vector<unsigned> ks;
+    try {
+        ks = parse_k_list(k_list_str);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "k_list parse error: %s\n", e.what());
+        return 1;
+    }
+
+    printSeparator();
+    std::cout << "QUERY BENCHMARK SETUP (multi-k)\n";
+    printSeparator();
+    std::cout << "Dataset:      " << dataset_name << "\n";
+    std::cout << "k values:     ";
+    for (size_t i = 0; i < ks.size(); ++i) std::cout << (i ? "," : "") << ks[i];
+    std::cout << "\n";
+    std::cout << "Reps/query:   " << reps << "\n";
+    std::cout << "Num queries:  " << num_queries << "\n";
+    std::cout << "Shuffle:      " << (shuffle_q ? "yes" : "no") << "\n\n";
+
+    // Load SA once (shared by all tasks)
+    std::unique_ptr<SuffixArray> SA;
+    try {
+        std::string sa_file = "indices/" + dataset_name + "_sa.bin";
+        std::cout << "Loading SA from " << sa_file << "...\n";
+        SA = std::make_unique<SuffixArray>(SuffixArray::load(sa_file));
+        std::cout << "  Entries: " << SA->getSuffixArray().size() << "\n\n";
+    } catch (...) {
+        std::cerr << "ERROR loading SA\n";
+        return 1;
+    }
+
+    // Launch per-k tasks in parallel
+    std::vector<std::future<LookupResult>> futs;
+    futs.reserve(ks.size());
+    for (unsigned k : ks) {
+        futs.emplace_back(std::async(std::launch::async, [&, k]() {
+            return run_one_k(dataset_name, *SA, k, reps, num_queries, shuffle_q);
+        }));
+    }
+
+    // Collect results
+    std::vector<LookupResult> results;
+    results.reserve(ks.size());
+    for (auto& f : futs) results.push_back(f.get());
+
+    // Print summary
+    printSeparator();
+    std::cout << "MULTI-k SUMMARY (ns/query; means & medians)\n";
+    printSeparator();
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "dataset,k,mean_sa_ns,mean_csa_ns,median_sa_ns,median_csa_ns,slowdown\n";
+    for (const auto& r : results) {
+        std::cout << r.toLatexRow() << "\n";
+    }
     printSeparator();
     std::cout << "DONE\n";
     printSeparator();
-
     return 0;
 }
